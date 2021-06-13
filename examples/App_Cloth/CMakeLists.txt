@@ -16,7 +16,8 @@ if(PERIDYNO_LIBRARY_PERIDYNAMICS)
         Framework 
         IO 
         RenderEngine 
-        Peridynamics 
+        Peridynamics
+        RigidBody
 		GlfwGUI)
 
     file(RELATIVE_PATH PROJECT_PATH_REL "${PROJECT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
