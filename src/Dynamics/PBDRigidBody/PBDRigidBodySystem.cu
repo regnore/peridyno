@@ -37,7 +37,7 @@ namespace dyno
 		cdBV->outContacts()->connect(merge->inContactsB());
 		this->animationPipeline()->pushModule(merge);
 
-		auto iterSolver = std::make_shared<IterativeConstraintSolver<TDataType>>();
+		auto iterSolver = std::make_shared<PBDIterativeConstraintSolver<TDataType>>();
 		this->stateTimeStep()->connect(iterSolver->inTimeStep());
 		this->varFrictionEnabled()->connect(iterSolver->varFrictionEnabled());
 		this->stateMass()->connect(iterSolver->inMass());

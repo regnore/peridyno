@@ -2,17 +2,17 @@
 
 namespace dyno
 {
-	IMPLEMENT_TCLASS(IterativeConstraintSolver, TDataType)
+	IMPLEMENT_TCLASS(PBDIterativeConstraintSolver, TDataType)
 
 	template<typename TDataType>
-	IterativeConstraintSolver<TDataType>::IterativeConstraintSolver()
+	PBDIterativeConstraintSolver<TDataType>::PBDIterativeConstraintSolver()
 		: ConstraintModule()
 	{
 		this->inContacts()->tagOptional(true);
 	}
 
 	template<typename TDataType>
-	IterativeConstraintSolver<TDataType>::~IterativeConstraintSolver()
+	PBDIterativeConstraintSolver<TDataType>::~PBDIterativeConstraintSolver()
 	{
 	}
 
@@ -148,26 +148,164 @@ namespace dyno
 		//inertia[pId] = rotMat[pId] * rotMat[pId].inverse();
 	}
 
+	template <typename Coord, typename Real>
+	__global__ void PBDRB_UpdateXV(
+		DArray<Coord> x,
+		DArray<Coord> x_prev,
+		DArray<Coord> v,
+		DArray<Real> mass,
+		Coord a_ext,
+		Real h)
+	{
+		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (pId >= x.size()) return;
+
+		x_prev[pId] = x[pId];
+		v[pId] += h * a_ext;
+		x[pId] += v[pId] * h;
+	}
+
+	template <typename Coord, typename Matrix, typename Quat,typename Real>
+	__global__ void PBDRB_UpdateQW(
+		DArray<Quat> q,
+		DArray<Quat> q_prev,
+		DArray<Matrix> R,
+		DArray<Matrix> I,
+		DArray<Coord> w,
+		DArray<Matrix> I_init,
+		Coord tau_ext,
+		Real h)
+	{
+		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (pId >= q.size()) return;
+
+		q_prev[pId] = q[pId];
+		w[pId] += h * I[pId].inverse() * (tau_ext - (w[pId].cross(I[pId] * w[pId])));
+		q[pId] += h * 0.5f * (Quat(w[pId][0], w[pId][1], w[pId][2], 0.0)* q[pId]);
+		q[pId] = q[pId].normalize();
+
+		R[pId] = q[pId].toMatrix3x3();
+		I[pId] = R[pId] * I_init[pId] * R[pId].inverse();
+	}
+
+	template <typename Coord, typename Quat, typename Real>
+	__global__ void PBDRB_CalcVW(
+		DArray<Coord> x,
+		DArray<Coord> x_prev,
+		DArray<Coord> v,
+		DArray<Quat> q,
+		DArray<Quat> q_prev,
+		DArray<Coord> w,
+		Real h)
+	{
+		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (pId >= x.size()) return;
+
+		v[pId] = (x[pId] - x_prev[pId]) / h;
+
+		Quat dq = q[pId] * (q_prev[pId].inverse());
+		w[pId] = (dq.w >=0 ? 1:-1) * 2 * Coord(dq.x , dq.y , dq.z) / h;
+	}
+
+	template <typename Coord, typename Quat, typename Matrix, typename Real, typename ContactPair>
+	__global__ void PBDRB_SolvePositions(
+		DArray<Coord> x,
+		DArray<Quat> q,
+		DArray<Matrix> R,
+		DArray<Matrix>I_init,
+		DArray<Real> m,
+		DArray<Matrix> I,
+		DArray<Real> lambda,
+		DArray<Real> alpha,
+		DArray<ContactPair> nbq,
+		DArray<Real> stepInv,
+		Real h)
+	{
+		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (pId >= nbq.size()) return;
+
+		int idx1 = nbq[pId].bodyId1;
+		int idx2 = nbq[pId].bodyId2;
+		Coord n = -nbq[pId].normal1;
+		n /= n.norm();
+		Real c = nbq[pId].interpenetration;
+		Real tildeAlpha = alpha[pId] / h / h;
+			if (idx2 != -1)
+			{
+				Coord r1 = nbq[pId].pos1 - x[idx1];
+				Coord r2 = nbq[pId].pos1 - x[idx2];
+				Coord temp3 = r1.cross(n);
+				Coord temp4 = r2.cross(n);
+
+				Real w1 = 1.0f / m[idx1] + (Real)(temp3.dot(I[idx1].inverse() * temp3));
+				Real w2 = 1.0f / m[idx2] + (Real)(temp4.dot(I[idx2].inverse() * temp4));
+
+				Real dLambda = ((-c - tildeAlpha * lambda[pId]) / (w1 + w2 + tildeAlpha));
+				dLambda *= 1 / (stepInv[idx1] + stepInv[idx2]);
+				lambda[pId] += dLambda;
+
+				Coord p = dLambda * n;
+				x[idx1] += p / m[idx1];
+				x[idx2] -= p / m[idx2];
+				Coord temp1 = I[idx1].inverse() * (r1.cross(p));
+				Coord temp2 = I[idx2].inverse() * (r2.cross(p));
+				q[idx1] += Quat(temp1[0], temp1[1], temp1[2], 0) * q[idx1] * 0.5f;
+				q[idx2] -= Quat(temp2[0], temp2[1], temp2[2], 0) * q[idx2] * 0.5f;
+
+				R[idx1] = q[idx1].toMatrix3x3();
+				I[idx1] = R[idx1] * I_init[idx1] * R[idx1].inverse();
+
+				R[idx2] = q[idx2].toMatrix3x3();
+				I[idx2] = R[idx2] * I_init[idx2] * R[idx2].inverse();
+			}
+			else
+			{
+				Coord r1 = nbq[pId].pos1 - x[idx1];
+				Coord temp3 = r1.cross(n);
+
+				Real w1 = 1.0f / m[idx1] + (Real)(temp3.dot(I[idx1].inverse() * temp3));
+				Real w2 = 0.0f;
+
+				Real dLambda = ((-c - tildeAlpha * lambda[pId]) / (w1 + w2 + tildeAlpha));
+				dLambda /= stepInv[idx1];
+				lambda[pId] += dLambda;
+
+				Coord p = dLambda * n;
+				x[idx1] += p / m[idx1];
+				Coord temp1 = I[idx1].inverse() * (r1.cross(p));
+				q[idx1] += Quat(temp1[0], temp1[1], temp1[2], 0) * q[idx1] * 0.5f;
+
+				R[idx1] = q[idx1].toMatrix3x3();
+				I[idx1] = R[idx1] * I_init[idx1] * R[idx1].inverse();
+			}
+	}
+
 	template<typename TDataType>
-	void IterativeConstraintSolver<TDataType>::constrain()
+	void PBDIterativeConstraintSolver<TDataType>::constrain()
 	{
 		uint num = this->inCenter()->size();
-		if (mAccel.size() != num * 2)
-		{
-			mAccel.resize(num * 2);
-		}
-		mAccel.reset();
-		Real dt = this->inTimeStep()->getData() / 20;
-		for (int ii = 0; ii < 20; ii++)
-		{
-			//construct j
+		Real dt = this->inTimeStep()->getData();
+		uint numSubsteps = this->varNumSubsteps()->getData();
+		Real h = dt / numSubsteps;
 
-			if (!this->inContacts()->isEmpty())
-			{
-				initializeJacobian(dt);
+		if (this->x_prev.size() == 0)
+			this->x_prev.resize(num);
 
-				int size_constraints = mAllConstraints.size();
-				for (int i = 0; i < 1; i++)
+		if (this->q_prev.size() == 0)
+			this->q_prev.resize(num);
+
+		Coord g = Coord(0.0f, -9.8f, 0.0f);
+		Coord tau = Coord(0.0f, 0.0f, 0.0f);
+
+		for (int ii = 0; ii < numSubsteps; ii++)
+		{
+			////construct j
+			//if (!this->inContacts()->isEmpty())
+			//{
+			//	initializeJacobian(dt);
+
+			//	int size_constraints = mAllConstraints.size();
+				/*for (int i = 0; i < this->varIterationNumber()->getData(); i++)
 				{
 					cuExecute(size_constraints,
 						TakeOneJacobiIteration,
@@ -181,38 +319,67 @@ namespace dyno
 						mAllConstraints,
 						mContactNumber);
 				}
+			}*/
+
+			cuExecute(num,
+				PBDRB_UpdateXV,
+				this->inCenter()->getData(),
+				x_prev,
+				this->inVelocity()->getData(),
+				this->inMass()->getData(),
+				g,
+				h);
+
+			cuExecute(num,
+				PBDRB_UpdateQW,
+				this->inQuaternion()->getData(),
+				q_prev,
+				this->inRotationMatrix()->getData(),
+				this->inInertia()->getData(),
+				this->inAngularVelocity()->getData(),
+				this->inInitialInertia()->getData(),
+				tau,
+				h);
+
+			uint numC = 0;
+			if (this->inContacts()->size() > 0)
+			{
+				this->initialize();
+				numC = this->inContacts()->size();
+			}
+
+			if (numC > 0)
+			{
+				for (int i = 0 ; i < this->varIterationNumber()->getData() ; i++) 
+				{
+					cuExecute(numC,
+						PBDRB_SolvePositions,
+						this->inCenter()->getData(),
+						this->inQuaternion()->getData(),
+						this->inRotationMatrix()->getData(),
+						this->inInitialInertia()->getData(),
+						this->inMass()->getData(),
+						this->inInertia()->getData(),
+						this->mLambda,
+						this->mAlpha,
+						this->mAllConstraints,
+						this->mContactNumber,
+						h);
+				}
 			}
 
 			cuExecute(num,
-				RB_UpdateVelocity,
-				this->inVelocity()->getData(),
-				this->inAngularVelocity()->getData(),
-				mAccel,
-				dt);
-
-			// 		cuExecute(num,
-			// 			RB_UpdateGesture,
-			// 			this->inCenter()->getData(),
-			// 			this->inQuaternion()->getData(),
-			// 			this->inRotationMatrix()->getData(),
-			// 			this->inInertia()->getData(),
-			// 			this->inVelocity()->getData(),
-			// 			this->inAngularVelocity()->getData(),
-			// 			mInitialInertia,
-			// 			dt);
-
-			cuExecute(num,
-				RB_UpdateGesture,
+				PBDRB_CalcVW,
 				this->inCenter()->getData(),
-				this->inQuaternion()->getData(),
-				this->inRotationMatrix()->getData(),
-				this->inInertia()->getData(),
+				this->x_prev,
 				this->inVelocity()->getData(),
+				this->inQuaternion()->getData(),
+				this->q_prev,
 				this->inAngularVelocity()->getData(),
-				this->inInitialInertia()->getData(),
-				dt);
+				h);
 
-			mAccel.reset();
+			this->mLambda.reset();
+			this->mAllConstraints.reset();
 		}
 	}
 
@@ -424,7 +591,41 @@ namespace dyno
 	}
 
 	template<typename TDataType>
-	void IterativeConstraintSolver<TDataType>::initializeJacobian(Real dt)
+	void PBDIterativeConstraintSolver<TDataType>::initialize()
+	{
+		if (this->inContacts()->isEmpty())
+			return;
+
+		auto& contacts = this->inContacts()->getData();
+		int sizeOfContacts = contacts.size();
+		int sizeOfConstraints = sizeOfContacts;
+
+		mAllConstraints.resize(sizeOfConstraints);
+
+		if (contacts.size() > 0)
+			mAllConstraints.assign(contacts, contacts.size(), 0, 0);
+
+		mLambda.resize(sizeOfConstraints);
+		mAlpha.resize(sizeOfConstraints);
+
+		auto sizeOfRigids = this->inCenter()->size();
+		mContactNumber.resize(sizeOfRigids);
+
+		mLambda.reset();
+		mContactNumber.reset();
+		mAlpha.reset();
+
+		if (sizeOfConstraints == 0) return;
+
+		cuExecute(sizeOfConstraints,
+			CalculateNbrCons,
+			mAllConstraints,
+			mContactNumber
+		);
+	}
+
+	template<typename TDataType>
+	void PBDIterativeConstraintSolver<TDataType>::initializeJacobian(Real dt)
 	{
 		//int sizeOfContacts = mBoundaryContacts.size() + contacts.size();
 
@@ -489,6 +690,7 @@ namespace dyno
 			mAllConstraints,
 			mContactNumber
 		);
+
 		cuExecute(sizeOfConstraints,
 			CalculateJacobians,
 			mJ,
@@ -517,5 +719,5 @@ namespace dyno
 
 
 
-	DEFINE_CLASS(IterativeConstraintSolver);
+	DEFINE_CLASS(PBDIterativeConstraintSolver);
 }

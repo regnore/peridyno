@@ -24,9 +24,9 @@ namespace dyno
 	 * 			Refer to "Iterative Dynamics with Temporal Coherence" by Erin Catto, 2005.
 	 */
 	template<typename TDataType>
-	class IterativeConstraintSolver : public ConstraintModule
+	class PBDIterativeConstraintSolver : public ConstraintModule
 	{
-		DECLARE_TCLASS(IterativeConstraintSolver, TDataType)
+		DECLARE_TCLASS(PBDIterativeConstraintSolver, TDataType)
 	public:
 		typedef typename TDataType::Real Real;
 		typedef typename TDataType::Coord Coord;
@@ -35,15 +35,17 @@ namespace dyno
 		typedef typename Quat<Real> TQuat;
 		typedef typename TContactPair<Real> ContactPair;
 		
-		IterativeConstraintSolver();
-		~IterativeConstraintSolver();
+		PBDIterativeConstraintSolver();
+		~PBDIterativeConstraintSolver();
 
 		void constrain() override;
 
 	public:
 		DEF_VAR(bool, FrictionEnabled, true, "");
 
-		DEF_VAR(uint, IterationNumber, 1, "");
+		DEF_VAR(uint, IterationNumber, 10, "");
+
+		DEF_VAR(uint, NumSubsteps, 1, "");
 
 	public:
 		DEF_VAR_IN(Real, TimeStep, "Time step size");
@@ -69,10 +71,11 @@ namespace dyno
 	private:
 		void initializeJacobian(Real dt);
 
+		void initialize();
+
 	private:
 		DArray<Coord> mJ;		//Jacobian
 		DArray<Coord> mB;		//B = M^{-1}J^T
-		DArray<Coord> mAccel;
 
 		DArray<Real> mEta;		//eta
 		DArray<Real> mD;		//diagonal elements of JB
@@ -83,5 +86,11 @@ namespace dyno
 		DArray<Matrix> mInitialInertia;
 
 		DArray<ContactPair> mAllConstraints;
+
+		DArray<Coord> x_prev;
+		DArray<TQuat> q_prev;
+
+		DArray<Real> mAlpha;
+
 	};
 }
