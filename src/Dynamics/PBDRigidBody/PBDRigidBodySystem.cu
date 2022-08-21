@@ -32,7 +32,7 @@ namespace dyno
 		this->stateTopology()->connect(cdBV->inDiscreteElements());
 		this->animationPipeline()->pushModule(cdBV);
 
-		auto merge = std::make_shared<ContactsUnion<TDataType>>();
+		auto merge = std::make_shared<PBDContactsUnion<TDataType>>();
 		elementQuery->outContacts()->connect(merge->inContactsA());
 		cdBV->outContacts()->connect(merge->inContactsB());
 		this->animationPipeline()->pushModule(merge);

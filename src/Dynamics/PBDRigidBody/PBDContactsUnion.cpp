@@ -2,13 +2,22 @@
 
 namespace dyno 
 {
-	IMPLEMENT_TCLASS(ContactsUnion, TDataType)
+	IMPLEMENT_TCLASS(PBDContactsUnion, TDataType)
 
 	template<typename TDataType>
-	void ContactsUnion<TDataType>::compute()
+	PBDContactsUnion<TDataType>::PBDContactsUnion()
+	{
+		this->setUpdateAlways(true);
+		this->inContactsA()->tagOptional(true); 
+		this->inContactsB()->tagOptional(true);
+	}
+
+	template<typename TDataType>
+	void PBDContactsUnion<TDataType>::compute()
 	{
 		auto inDataA = this->inContactsA()->getDataPtr();
 		auto inDataB = this->inContactsB()->getDataPtr();
+
 		
 		uint total_size = 0;
 		if (inDataA != nullptr)
@@ -17,10 +26,15 @@ namespace dyno
 		if (inDataB != nullptr)
 			total_size += inDataB->size();
 
+		printf("compute! AS : %d\tBS : %d\tTS : %d\n", inDataA->size(), inDataB->size(), total_size);
+
 		if (this->outContacts()->size() != total_size)
 			this->outContacts()->resize(total_size);
 
-		auto& outData = this->outContacts()->getData();
+		DArray<ContactPair> outData;
+
+		if(this->outContacts()->getDataPtr()!=nullptr)
+			outData = this->outContacts()->getData();
 
 		if (inDataA != nullptr)
 			outData.assign(*inDataA, inDataA->size());
@@ -29,13 +43,5 @@ namespace dyno
 			outData.assign(*inDataB, inDataB->size(), inDataA->size(), 0);
 	}
 
-	template<typename TDataType>
-	bool ContactsUnion<TDataType>::validateInputs()
-	{
-		bool ret = this->inContactsA()->isEmpty() && this->inContactsB()->isEmpty();
-
-		return !ret;
-	}
-
-	DEFINE_CLASS(ContactsUnion);
+	DEFINE_CLASS(PBDContactsUnion);
 }

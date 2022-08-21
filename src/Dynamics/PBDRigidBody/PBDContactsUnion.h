@@ -22,14 +22,14 @@
 namespace dyno 
 {
 	template<typename TDataType>
-	class ContactsUnion : public ComputeModule
+	class PBDContactsUnion : public ComputeModule
 	{
-		DECLARE_TCLASS(ContactsUnion, TDataType)
+		DECLARE_TCLASS(PBDContactsUnion, TDataType)
 	public:
 		typedef typename TContactPair<Real> ContactPair;
 
-		ContactsUnion() {};
-		~ContactsUnion() override {};
+		PBDContactsUnion();
+		~PBDContactsUnion() override {};
 
 		void compute() override;
 
@@ -38,8 +38,5 @@ namespace dyno
 		DEF_ARRAY_IN(ContactPair, ContactsB, DeviceType::GPU, "");
 
 		DEF_ARRAY_OUT(ContactPair, Contacts, DeviceType::GPU, "");
-
-	protected:
-		bool validateInputs() override;
 	};
 }

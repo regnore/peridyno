@@ -297,6 +297,14 @@ namespace dyno
 		Coord g = Coord(0.0f, -9.8f, 0.0f);
 		Coord tau = Coord(0.0f, 0.0f, 0.0f);
 
+		uint numC = 0;
+		if (this->inContacts()->size() > 0)
+		{
+			this->initialize();
+			numC = this->inContacts()->size();
+			printf("numC : %d\n",numC);
+		}
+
 		for (int ii = 0; ii < numSubsteps; ii++)
 		{
 			////construct j
@@ -340,33 +348,27 @@ namespace dyno
 				this->inInitialInertia()->getData(),
 				tau,
 				h);
-
-			uint numC = 0;
-			if (this->inContacts()->size() > 0)
-			{
-				this->initialize();
-				numC = this->inContacts()->size();
-			}
-
-			if (numC > 0)
-			{
 				for (int i = 0 ; i < this->varIterationNumber()->getData() ; i++) 
 				{
-					cuExecute(numC,
-						PBDRB_SolvePositions,
-						this->inCenter()->getData(),
-						this->inQuaternion()->getData(),
-						this->inRotationMatrix()->getData(),
-						this->inInitialInertia()->getData(),
-						this->inMass()->getData(),
-						this->inInertia()->getData(),
-						this->mLambda,
-						this->mAlpha,
-						this->mAllConstraints,
-						this->mContactNumber,
-						h);
+					if (numC > 0)
+					{
+						printf("%d\n",numC);
+						cuExecute(numC,
+							PBDRB_SolvePositions,
+							this->inCenter()->getData(),
+							this->inQuaternion()->getData(),
+							this->inRotationMatrix()->getData(),
+							this->inInitialInertia()->getData(),
+							this->inMass()->getData(),
+							this->inInertia()->getData(),
+							this->mLambda,
+							this->mAlpha,
+							this->mAllConstraints,
+							this->mContactNumber,
+							h);
+						//this->inContacts()->resize(0);
+					}
 				}
-			}
 
 			cuExecute(num,
 				PBDRB_CalcVW,
@@ -379,8 +381,8 @@ namespace dyno
 				h);
 
 			this->mLambda.reset();
-			this->mAllConstraints.reset();
 		}
+		this->mAllConstraints.reset();
 	}
 
 	template <typename ContactPair>
