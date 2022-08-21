@@ -43,7 +43,7 @@ namespace dyno
 	public:
 		DEF_VAR(bool, FrictionEnabled, true, "");
 
-		DEF_VAR(uint, IterationNumber, 10, "");
+		DEF_VAR(uint, IterationNumber, 1, "");
 
 		DEF_VAR(uint, NumSubsteps, 1, "");
 

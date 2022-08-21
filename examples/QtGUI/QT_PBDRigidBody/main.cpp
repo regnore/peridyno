@@ -23,21 +23,21 @@ std::shared_ptr<SceneGraph> creatBricks()
 	std::shared_ptr<SceneGraph> scn = std::make_shared<SceneGraph>();
 
 	auto rigid = scn->addNode(std::make_shared<PBDRigidBodySystem<DataType3f>>());
-	SphereInfo sphere;
-	RigidBodyInfo rigidSphere;
-	for (int i = 0; i < 5; i++)
-	{
-		for (int j = 0; j < i; j++) 
-		{
-			sphere.center = Vec3f(2*0.025f * i, 0.025f, 2*0.025f * j);
-			sphere.radius = 0.025f;
-			rigid->addSphere(sphere, rigidSphere);
-		}
-	}
-	rigidSphere.linearVelocity = Vec3f(9.0f, 0.0f, -6.0f);
-	sphere.center = Vec3f(-0.2f, 0.025f,0.3f);
-	sphere.radius = 0.025f;
-	rigid->addSphere(sphere, rigidSphere);
+	//SphereInfo sphere;
+	//RigidBodyInfo rigidSphere;
+	//for (int i = 0; i < 5; i++)
+	//{
+	//	for (int j = 0; j < i; j++) 
+	//	{
+	//		sphere.center = Vec3f(2*0.025f * i, 0.025f, 2*0.025f * j);
+	//		sphere.radius = 0.025f;
+	//		rigid->addSphere(sphere, rigidSphere);
+	//	}
+	//}
+	//rigidSphere.linearVelocity = Vec3f(9.0f, 0.0f, -6.0f);
+	//sphere.center = Vec3f(-0.2f, 0.025f,0.3f);
+	//sphere.radius = 0.025f;
+	//rigid->addSphere(sphere, rigidSphere);
 
 	/*BoxInfo box;
 	RigidBodyInfo rigidBox;
@@ -45,7 +45,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 	box.halfLength = Vec3f(0.1f);
 	rigid->addBox(box, rigidBox);*/
 
-	/*SphereInfo sphere;
+	SphereInfo sphere;
 	RigidBodyInfo rigidSphere;
 	rigidSphere.linearVelocity=Vec3f(0.0f,-5.0f,0.0f);
 	sphere.center = Vec3f(0.1f, 0.2f, 0.1f);
@@ -54,6 +54,13 @@ std::shared_ptr<SceneGraph> creatBricks()
 	sphere.center = Vec3f(0.1f, 1.5f, 0.1f);
 	rigidSphere.linearVelocity = Vec3f(0.0f, 0.0f, 0.0f);
 	sphere.radius = 1.0f;
+	rigid->addSphere(sphere, rigidSphere);
+
+	/*SphereInfo sphere;
+	RigidBodyInfo rigidSphere;
+	rigidSphere.linearVelocity = Vec3f(0.0f, -0.0f, 0.0f);
+	sphere.center = Vec3f(0.5f, 0.2f, 0.5f);
+	sphere.radius = 0.2f;
 	rigid->addSphere(sphere, rigidSphere);*/
 
 	auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();
