@@ -207,12 +207,24 @@ namespace dyno
 		w[pId] = (dq.w >=0 ? 1:-1) * 2 * Coord(dq.x , dq.y , dq.z) / h;
 	}
 
+	template <typename Matrix, typename Quat>
+	__global__ void PBDRB_UpdateRI(
+		DArray<Quat> q,
+		DArray<Matrix> I_init,
+		DArray<Matrix> I,
+		DArray<Matrix> R)
+	{
+		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (pId >= q.size()) return;
+
+		R[pId] = q[pId].toMatrix3x3();
+		I[pId] = R[pId] * I_init[pId] * R[pId].inverse();
+	}
+
 	template <typename Coord, typename Quat, typename Matrix, typename Real, typename ContactPair>
 	__global__ void PBDRB_SolvePositions(
 		DArray<Coord> x,
 		DArray<Quat> q,
-		DArray<Matrix> R,
-		DArray<Matrix>I_init,
 		DArray<Real> m,
 		DArray<Matrix> I,
 		DArray<Real> lambda,
@@ -245,18 +257,29 @@ namespace dyno
 				lambda[pId] += dLambda;
 
 				Coord p = dLambda * n;
-				x[idx1] += p / m[idx1];
-				x[idx2] -= p / m[idx2];
+
 				Coord temp1 = I[idx1].inverse() * (r1.cross(p));
 				Coord temp2 = I[idx2].inverse() * (r2.cross(p));
-				q[idx1] += Quat(temp1[0], temp1[1], temp1[2], 0) * q[idx1] * 0.5f;
-				q[idx2] -= Quat(temp2[0], temp2[1], temp2[2], 0) * q[idx2] * 0.5f;
+				Quat temp5 = Quat(temp1[0], temp1[1], temp1[2], 0) * q[idx1] * 0.5f;
+				Quat temp6 = Quat(temp2[0], temp2[1], temp2[2], 0) * q[idx2] * 0.5f;
 
-				R[idx1] = q[idx1].toMatrix3x3();
-				I[idx1] = R[idx1] * I_init[idx1] * R[idx1].inverse();
+				atomicAdd(&x[idx1][0], p[0] / m[idx1]);
+				atomicAdd(&x[idx1][1], p[1] / m[idx1]);
+				atomicAdd(&x[idx1][2], p[2] / m[idx1]);
 
-				R[idx2] = q[idx2].toMatrix3x3();
-				I[idx2] = R[idx2] * I_init[idx2] * R[idx2].inverse();
+				atomicAdd(&x[idx2][0], -p[0] / m[idx2]);
+				atomicAdd(&x[idx2][1], -p[1] / m[idx2]);
+				atomicAdd(&x[idx2][2], -p[2] / m[idx2]);
+
+				atomicAdd(&q[idx1].x, temp5.x);
+				atomicAdd(&q[idx1].y, temp5.y);
+				atomicAdd(&q[idx1].z, temp5.z);
+				atomicAdd(&q[idx1].w, temp5.w);
+
+				atomicAdd(&q[idx2].x, -temp6.x);
+				atomicAdd(&q[idx2].y, -temp6.y);
+				atomicAdd(&q[idx2].z, -temp6.z);
+				atomicAdd(&q[idx2].w, -temp6.w);
 			}
 			else
 			{
@@ -265,19 +288,122 @@ namespace dyno
 
 				Real w1 = 1.0f / m[idx1] + (Real)(temp3.dot(I[idx1].inverse() * temp3));
 				Real w2 = 0.0f;
-
+				//printf("%.10f\n", c);
 				Real dLambda = ((-c - tildeAlpha * lambda[pId]) / (w1 + w2 + tildeAlpha));
+				//printf("%.10f\n", dLambda);
+				//printf("%.10f\n",stepInv[idx1]);
 				dLambda /= stepInv[idx1];
+				//printf("%.10f\n", dLambda);
 				lambda[pId] += dLambda;
-
 				Coord p = dLambda * n;
-				x[idx1] += p / m[idx1];
+				//printf("%f\t%f\t%f\n", x[idx1][0], x[idx1][1], x[idx1][2]);
 				Coord temp1 = I[idx1].inverse() * (r1.cross(p));
-				q[idx1] += Quat(temp1[0], temp1[1], temp1[2], 0) * q[idx1] * 0.5f;
+				Quat temp2 = 0.5f * Quat(temp1[0], temp1[1], temp1[2], 0) * q[idx1];
+				atomicAdd(&x[idx1][0], p[0] / m[idx1]);
+				atomicAdd(&x[idx1][1], p[1] / m[idx1]);
+				atomicAdd(&x[idx1][2], p[2] / m[idx1]);
 
-				R[idx1] = q[idx1].toMatrix3x3();
-				I[idx1] = R[idx1] * I_init[idx1] * R[idx1].inverse();
+				atomicAdd(&q[idx1].x, temp2.x);
+				atomicAdd(&q[idx1].y, temp2.y);
+				atomicAdd(&q[idx1].z, temp2.z);
+				atomicAdd(&q[idx1].w, temp2.w);
+				//printf("%f\t%f\t%f\t%f\n", q[idx1].x, q[idx1].y, q[idx1].z, q[idx1].w);
 			}
+	}
+
+	template <typename Coord, typename Matrix, typename Real, typename ContactPair>
+	__global__ void PBDRB_SolveVelocities(
+		DArray<Coord> x,
+		DArray<Coord> v,
+		DArray<Coord> w,
+		DArray<Real> m,
+		DArray<Matrix> I,
+		DArray<Real> lambda,
+		DArray<Real> miu,
+		DArray<ContactPair> nbq,
+		DArray<Real> stepInv,
+		Real h) 
+	{
+		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (pId >= nbq.size()) return;
+
+		int idx1 = nbq[pId].bodyId1;
+		int idx2 = nbq[pId].bodyId2;
+		Coord n = -nbq[pId].normal1;
+		n /= n.norm();
+
+		if (idx2 != -1)
+		{
+			Coord r1 = nbq[pId].pos1 - x[idx1];
+			Coord r2 = nbq[pId].pos1 - x[idx2];
+
+			Coord vv = (v[idx1] + w[idx1].cross(r1)) - (v[idx2] + w[idx2].cross(r2));
+			Real v_n = n.dot(vv);
+			Coord v_t = vv - v_n*n;
+
+			if (v_t.norm() > 0)
+			{
+				Real miu_d = (miu[idx1] + miu[idx2]) / 2;
+				Coord dv = -(v_t / v_t.norm() * min(h * miu_d * (lambda[pId] / h / h), v_t.norm()));
+
+				Coord temp1 = r1.cross(n);
+				Coord temp2 = r2.cross(n);
+
+				Real w1 = 1.0f / m[idx1] + (Real)(temp1.dot(I[idx1].inverse() * temp1));
+				Real w2 = 1.0f / m[idx2] + (Real)(temp2.dot(I[idx2].inverse() * temp2));
+				Coord p = -dv / (w1 + w2);
+
+				Coord temp3 = I[idx1].inverse() * (r1.cross(p));
+				Coord temp4 = I[idx2].inverse() * (r2.cross(p));
+
+				atomicAdd(&v[idx1][0], p[0] / m[idx1]);
+				atomicAdd(&v[idx1][1], p[1] / m[idx1]);
+				atomicAdd(&v[idx1][2], p[2] / m[idx1]);
+
+				atomicAdd(&v[idx2][0], -p[0] / m[idx2]);
+				atomicAdd(&v[idx2][1], -p[1] / m[idx2]);
+				atomicAdd(&v[idx2][2], -p[2] / m[idx2]);
+
+				atomicAdd(&w[idx1][0], temp3[0]);
+				atomicAdd(&w[idx1][1], temp3[1]);
+				atomicAdd(&w[idx1][2], temp3[2]);
+
+				atomicAdd(&w[idx2][0], -temp4[0]);
+				atomicAdd(&w[idx2][1], -temp4[1]);
+				atomicAdd(&w[idx2][2], -temp4[2]);
+			}
+		}
+		else 
+		{
+			Coord r1 = nbq[pId].pos1 - x[idx1];
+
+			Coord vv = v[idx1] + w[idx1].cross(r1);
+			Real v_n = n .dot(vv);
+			Coord v_t = vv - v_n * n;
+
+			if (v_t.norm() > 0)
+			{
+				Real miu_d = miu[idx1];
+				Coord dv = -(min(h * miu_d * (lambda[pId] / h / h), v_t.norm()) / v_t.norm() * v_t);
+
+				Coord temp1 = r1.cross(n);
+
+				Real w1 = 1.0f / m[idx1] + temp1.dot(I[idx1].inverse() * temp1);
+				Real w2 = 0.0f;
+				Coord p = -dv / (w1 + w2);
+
+				Coord temp3 = I[idx1].inverse() * (r1.cross(p));
+
+				atomicAdd(&v[idx1][0], p[0] / m[idx1]);
+				atomicAdd(&v[idx1][1], p[1] / m[idx1]);
+				atomicAdd(&v[idx1][2], p[2] / m[idx1]);
+				//printf("%.10f\t%.10f\t%.10f\n", v[idx1][0], v[idx1][1], v[idx1][2]);
+
+				atomicAdd(&w[idx1][0], temp3[0]);
+				atomicAdd(&w[idx1][1], temp3[1]);
+				atomicAdd(&w[idx1][2], temp3[2]);
+			}
+		}
 	}
 
 	template<typename TDataType>
@@ -302,86 +428,81 @@ namespace dyno
 		{
 			this->initialize();
 			numC = this->inContacts()->size();
-			printf("numC : %d\n",numC);
 		}
+		cuExecute(num,
+			PBDRB_UpdateXV,
+			this->inCenter()->getData(),
+			x_prev,
+			this->inVelocity()->getData(),
+			this->inMass()->getData(),
+			g,
+			h);
 
-		for (int ii = 0; ii < numSubsteps; ii++)
+		cuExecute(num,
+			PBDRB_UpdateQW,
+			this->inQuaternion()->getData(),
+			q_prev,
+			this->inRotationMatrix()->getData(),
+			this->inInertia()->getData(),
+			this->inAngularVelocity()->getData(),
+			this->inInitialInertia()->getData(),
+			tau,
+			h);
+
+		if (numC > 0)
 		{
-			////construct j
-			//if (!this->inContacts()->isEmpty())
-			//{
-			//	initializeJacobian(dt);
-
-			//	int size_constraints = mAllConstraints.size();
-				/*for (int i = 0; i < this->varIterationNumber()->getData(); i++)
-				{
-					cuExecute(size_constraints,
-						TakeOneJacobiIteration,
-						mLambda,
-						mAccel,
-						mD,
-						mJ,
-						mB,
-						mEta,
-						this->inMass()->getData(),
-						mAllConstraints,
-						mContactNumber);
-				}
-			}*/
-
-			cuExecute(num,
-				PBDRB_UpdateXV,
+			cuExecute(numC,
+				PBDRB_SolvePositions,
 				this->inCenter()->getData(),
-				x_prev,
-				this->inVelocity()->getData(),
+				this->inQuaternion()->getData(),
 				this->inMass()->getData(),
-				g,
-				h);
-
-			cuExecute(num,
-				PBDRB_UpdateQW,
-				this->inQuaternion()->getData(),
-				q_prev,
-				this->inRotationMatrix()->getData(),
 				this->inInertia()->getData(),
-				this->inAngularVelocity()->getData(),
-				this->inInitialInertia()->getData(),
-				tau,
+				this->mLambda,
+				this->mAlpha,
+				this->mAllConstraints,
+				this->mContactNumber,
 				h);
-				for (int i = 0 ; i < this->varIterationNumber()->getData() ; i++) 
-				{
-					if (numC > 0)
-					{
-						printf("%d\n",numC);
-						cuExecute(numC,
-							PBDRB_SolvePositions,
-							this->inCenter()->getData(),
-							this->inQuaternion()->getData(),
-							this->inRotationMatrix()->getData(),
-							this->inInitialInertia()->getData(),
-							this->inMass()->getData(),
-							this->inInertia()->getData(),
-							this->mLambda,
-							this->mAlpha,
-							this->mAllConstraints,
-							this->mContactNumber,
-							h);
-						//this->inContacts()->resize(0);
-					}
-				}
 
-			cuExecute(num,
-				PBDRB_CalcVW,
-				this->inCenter()->getData(),
-				this->x_prev,
-				this->inVelocity()->getData(),
+			cuExecute(
+				num,
+				PBDRB_UpdateRI,
 				this->inQuaternion()->getData(),
-				this->q_prev,
-				this->inAngularVelocity()->getData(),
-				h);
-
-			this->mLambda.reset();
+				this->inInitialInertia()->getData(),
+				this->inInertia()->getData(),
+				this->inRotationMatrix()->getData());
 		}
+
+		cuExecute(
+			num,
+			PBDRB_CalcVW,
+			this->inCenter()->getData(),
+			x_prev,
+			this->inVelocity()->getData(),
+			this->inQuaternion()->getData(),
+			q_prev,
+			this->inAngularVelocity()->getData(),
+			h);
+		if (this->varFrictionEnabled()->getData())
+		{
+			if (numC > 0)
+			{
+				cuExecute(
+					numC,
+					PBDRB_SolveVelocities,
+					this->inCenter()->getData(),
+					this->inVelocity()->getData(),
+					this->inAngularVelocity()->getData(),
+					this->inMass()->getData(),
+					this->inInertia()->getData(),
+					this->mLambda,
+					this->mMiu,
+					this->mAllConstraints,
+					this->mContactNumber,
+					h);
+			}
+		}
+
+		this->mLambda.reset();
 		this->mAllConstraints.reset();
 	}
 
@@ -592,11 +713,34 @@ namespace dyno
 		nbq[pId * 2 + 1 + contact_size].normal1 = n2;
 	}
 
+	__global__ void SetupMiu(
+		DArray<Real> miu,
+		Real f
+	)
+	{
+		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (pId >= miu.size()) return;
+
+		miu[pId] = f;
+	}
+
 	template<typename TDataType>
 	void PBDIterativeConstraintSolver<TDataType>::initialize()
 	{
 		if (this->inContacts()->isEmpty())
 			return;
+
+		if (this->mMiu.size() == 0) 
+		{
+			uint size = this->inCenter()->size();
+			this->mMiu.resize(size);
+			cuExecute(size,
+				SetupMiu,
+				this->mMiu,
+				400.0f
+			);
+		}
+
 
 		auto& contacts = this->inContacts()->getData();
 		int sizeOfContacts = contacts.size();
@@ -672,7 +816,8 @@ namespace dyno
 		mLambda.reset();
 		mContactNumber.reset();
 
-		if (sizeOfConstraints == 0) return;
+		if (sizeOfConstraints == 0) 
+			return;
 
 // 		if (contacts.size() > 0)
 // 			mAllConstraints.assign(contacts, contacts.size());

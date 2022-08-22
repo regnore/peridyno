@@ -7,7 +7,6 @@ namespace dyno
 	template<typename TDataType>
 	PBDContactsUnion<TDataType>::PBDContactsUnion()
 	{
-		this->setUpdateAlways(true);
 		this->inContactsA()->tagOptional(true); 
 		this->inContactsB()->tagOptional(true);
 	}
@@ -25,8 +24,6 @@ namespace dyno
 
 		if (inDataB != nullptr)
 			total_size += inDataB->size();
-
-		printf("compute! AS : %d\tBS : %d\tTS : %d\n", inDataA->size(), inDataB->size(), total_size);
 
 		if (this->outContacts()->size() != total_size)
 			this->outContacts()->resize(total_size);

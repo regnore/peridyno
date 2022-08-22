@@ -91,6 +91,6 @@ namespace dyno
 		DArray<TQuat> q_prev;
 
 		DArray<Real> mAlpha;
-
+		DArray<Real> mMiu;
 	};
 }
