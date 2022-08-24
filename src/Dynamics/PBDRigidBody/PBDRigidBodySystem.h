@@ -1,6 +1,7 @@
 #pragma once
 #include "Node.h"
 #include "PBDRigidBodyShared.h"
+#include "Joint.h"
 #include <vector>
 #include <iostream>
 namespace dyno
@@ -44,6 +45,10 @@ namespace dyno
 			const RigidBodyInfo& bodyDef,
 			const Real density = Real(1));
 
+		void addJoint(
+			const Joint<Real>& j
+		);
+
 	protected:
 		void resetStates() override;
 
@@ -78,6 +83,18 @@ namespace dyno
 		 * @brief Particle position
 		 */
 		DEF_ARRAY_STATE(Matrix, RotationMatrix, DeviceType::GPU, "Rotation matrix of rigid bodies");
+
+		/**
+		 * @brief Particle position
+		 */
+		DEF_ARRAY_STATE(Real, DynamicFriction, DeviceType::GPU, "Dynamic friction coefficient of rigid bodies");
+
+		/**
+		 * @brief Particle position
+		 */
+		DEF_ARRAY_STATE(Real, StaticFriction, DeviceType::GPU, "Static friction coefficient of rigid bodies");
+
+		//DEF_ARRAY_STATE(Joint, Joint, DeviceType::GPU, "Joints");
 
 		DEF_ARRAY_STATE(Matrix, Inertia, DeviceType::GPU, "Inertia matrix");
 

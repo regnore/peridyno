@@ -66,6 +66,10 @@ namespace dyno
 
 		DEF_ARRAY_IN(TQuat, Quaternion, DeviceType::GPU, "Quaternion");
 
+		DEF_ARRAY_IN(Real, DynamicFriction, DeviceType::GPU, "Dynamic Friction Coefficient");
+
+		DEF_ARRAY_IN(Real, StaticFriction, DeviceType::GPU, "Static Friction Coefficient");
+
 		DEF_ARRAY_IN(ContactPair, Contacts, DeviceType::GPU, "");
 
 	private:
@@ -79,7 +83,8 @@ namespace dyno
 
 		DArray<Real> mEta;		//eta
 		DArray<Real> mD;		//diagonal elements of JB
-		DArray<Real> mLambda;	//contact impulse
+		DArray<Real> mLambdaN;	//contact impulse
+		DArray<Real> mLambdaT;
 
 		DArray<Real> mContactNumber;
 
@@ -89,8 +94,9 @@ namespace dyno
 
 		DArray<Coord> x_prev;
 		DArray<TQuat> q_prev;
+		DArray<Coord> v_prev;
+		DArray<Coord> w_prev;
 
 		DArray<Real> mAlpha;
-		DArray<Real> mMiu;
 	};
 }

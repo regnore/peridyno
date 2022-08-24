@@ -48,6 +48,8 @@ namespace dyno
 		this->stateInertia()->connect(iterSolver->inInertia());
 		this->stateQuaternion()->connect(iterSolver->inQuaternion());
 		this->stateInitialInertia()->connect(iterSolver->inInitialInertia());
+		this->stateDynamicFriction()->connect(iterSolver->inDynamicFriction());
+		this->stateStaticFriction()->connect(iterSolver->inStaticFriction());
 
 		merge->outContacts()->connect(iterSolver->inContacts());
 
@@ -142,8 +144,15 @@ namespace dyno
 		mHostTets.push_back(b);
 	}
 
+	/*template<typename TDataType>
+	void PBDRigidBodySystem<TDataType>::addJoint(
+		const Joint<Real>& j)
+	{
+		mJoint.push_back(j);
+	}*/
+
 	template <typename Real, typename Coord, typename Matrix, typename Quat>
-	__global__ void RB_SetupInitialStates(
+	__global__ void PBDRB_SetupInitialStates(
 		DArray<Real> mass,
 		DArray<Coord> pos,
 		DArray<Matrix> rotation,
@@ -152,6 +161,8 @@ namespace dyno
 		DArray<Quat> rotation_q,
 		DArray<Matrix> inertia,
 		DArray<CollisionMask> mask,
+		DArray<Real> miuS,
+		DArray<Real> miuD,
 		DArray<RigidBodyInfo> states,
 		ElementOffset offset)
 	{
@@ -167,6 +178,8 @@ namespace dyno
 		pos[tId] = states[tId].position;
 		inertia[tId] = states[tId].inertia;
 		mask[tId] = states[tId].collisionMask;
+		miuS[tId] = 0.42f;
+		miuD[tId] = 0.4f;
 	}
 
 	__global__ void SetupBoxes(
@@ -257,9 +270,11 @@ namespace dyno
 		this->stateInertia()->resize(sizeOfRigids);
 		this->stateQuaternion()->resize(sizeOfRigids);
 		this->stateCollisionMask()->resize(sizeOfRigids);
+		this->stateDynamicFriction()->resize(sizeOfRigids);
+		this->stateStaticFriction()->resize(sizeOfRigids);
 
 		cuExecute(sizeOfRigids,
-			RB_SetupInitialStates,
+			PBDRB_SetupInitialStates,
 			this->stateMass()->getData(),
 			this->stateCenter()->getData(),
 			this->stateRotationMatrix()->getData(),
@@ -268,13 +283,13 @@ namespace dyno
 			this->stateQuaternion()->getData(),
 			this->stateInertia()->getData(),
 			this->stateCollisionMask()->getData(),
+			this->stateStaticFriction()->getData(),
+			this->stateDynamicFriction()->getData(),
 			mDeviceRigidBodyStates,
 			eleOffset);
 
 		this->stateInitialInertia()->resize(sizeOfRigids);
 		this->stateInitialInertia()->getDataPtr()->assign(this->stateInertia()->getData());
-
-
 
 		m_yaw = 0.0f;
 		m_pitch = 0.0f;

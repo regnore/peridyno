@@ -1,5 +1,5 @@
-if(PERIDYNO_LIBRARY_RIGIDBODY)
-    set(PROJECT_NAME GL_PBDRigidBody)
+if(PERIDYNO_LIBRARY_PBDRIGIDBODY)
+    set(PROJECT_NAME GL_PBDStack)
     set(SRC_DIR "${PROJECT_SOURCE_DIR}/Examples/${PROJECT_NAME}")
 
     file(
@@ -22,7 +22,7 @@ if(PERIDYNO_LIBRARY_RIGIDBODY)
         GLRenderEngine)
 
     file(RELATIVE_PATH PROJECT_PATH_REL "${PROJECT_SOURCE_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
-    set_target_properties(${PROJECT_NAME} PROPERTIES FOLDER "Examples/RigidBody")
+    set_target_properties(${PROJECT_NAME} PROPERTIES FOLDER "Examples/PBDRigidBody")
 
     if(WIN32)
         set_target_properties(${PROJECT_NAME} PROPERTIES
