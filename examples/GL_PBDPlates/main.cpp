@@ -28,15 +28,18 @@ std::shared_ptr<SceneGraph> creatBricks()
 	RigidBodyInfo rigidBox;
 	box.center =Vec3f(0.0f,0.025f,0.0f) ;
 	box.halfLength = Vec3f(0.75f, 0.025f, 0.75f);
-	rigidBox.linearVelocity = Vec3f(5.0f,0.0f,0.0f);
+	rigidBox.linearVelocity = Vec3f(0.0f,0.0f,0.0f);
+	rigidBox.angularVelocity = Vec3f(0.0f, 100000.0f, 0.0f);
 	rigid->addBox(box, rigidBox);
 	box.center = Vec3f(-0.3f, 0.15f, 0.0f);
 	box.halfLength = Vec3f(0.1f, 0.1f, 0.1f);
 	rigidBox.linearVelocity = Vec3f(0.0f, 0.0f, 0.0f);
+	rigidBox.angularVelocity = Vec3f(0.0f, 0.0f, 0.0f);
 	rigid->addBox(box, rigidBox);
 	box.center = Vec3f(0.3f, 0.15f, 0.0f);
 	box.halfLength = Vec3f(0.1f, 0.1f, 0.1f);
 	rigidBox.linearVelocity = Vec3f(0.0f, 0.0f, 0.0f);
+	rigidBox.angularVelocity = Vec3f(0.0f, 0.0f, 0.0f);
 	rigid->addBox(box, rigidBox);
 
 	auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();

@@ -25,10 +25,11 @@ std::shared_ptr<SceneGraph> creatBricks()
 	auto rigid = scn->addNode(std::make_shared<PBDRigidBodySystem<DataType3f>>());
 
 	RigidBodyInfo rigidBody;
-	rigidBody.linearVelocity = Vec3f(10.0f, -0.0f, 0);
+	rigidBody.linearVelocity = Vec3f(5.0f, 0.0f, 0.0f);
+	rigidBody.angularVelocity = Vec3f(0.0f, 0.0f, 0.0f);
 	BoxInfo box;
 
-	box.center =Vec3f(-2.0f,0.2f,0.0f);
+	box.center =Vec3f(-2.0f,0.1f,0.0f);
 	box.halfLength = Vec3f(0.1f);
 	rigid->addBox(box, rigidBody);
 

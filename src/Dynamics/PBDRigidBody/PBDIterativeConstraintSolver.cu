@@ -261,8 +261,8 @@ namespace dyno
 				Coord p1 = x[idx1] + r1;
 				Coord p2 = x[idx2] + r2;
 
-				Coord p1Bar = x_prev[idx1] + (q_prev[idx1] - q[idx1]).rotate(r1);
-				Coord p2Bar = x_prev[idx2] + (q_prev[idx2] - q[idx2]).rotate(r2);
+				Coord p1Bar = x_prev[idx1] + r1;
+				Coord p2Bar = x_prev[idx2] + r2;
 
 				Coord temp3 = r1.cross(n);
 				Coord temp4 = r2.cross(n);
@@ -300,14 +300,12 @@ namespace dyno
 				atomicAdd(&q[idx2].w, -temp6.w);
 
 				Coord dP = (p1 - p1Bar) - (p2 - p2Bar);
-				if (dP.norm() < EPSILON || dP.norm() > -EPSILON)
-					dP = Coord(0.0f);
 				Coord dP_t = dP - (dP.dot(n)) * n;
-				if (dP_t.norm() < EPSILON || dP_t.norm() > -EPSILON)
-					dP_t = Coord(0.0f);
 
 				Real dLambdaT = ((-dP_t.norm() - tildeAlpha * lambdaT[pId]) / (w1 + w2 + tildeAlpha));
 				dLambdaT *= 1 / (stepInv[idx1] + stepInv[idx2]);
+				if (dLambdaT > 0)
+					dLambdaT = 0.0f;
 				lambdaT[pId] += dLambdaT;
 
 				if (lambdaT[pId] > (miuS[idx1] + miuS[idx2]) / 2 * lambdaN[pId])
@@ -340,7 +338,7 @@ namespace dyno
 			{
 				Coord r1 = nbq[pId].pos1 - x[idx1];
 				Coord p1 = x[idx1] + r1;
-				Coord p1Bar = x_prev[idx1] + (q_prev[idx1] - q[idx1]).rotate(r1);
+				Coord p1Bar = x_prev[idx1] + r1;
 				//printf("%f\t%f\t%f\n",p1Bar[0], p1Bar[1], p1Bar[2]);
 				Coord temp3 = r1.cross(n);
 
@@ -362,14 +360,12 @@ namespace dyno
 				atomicAdd(&q[idx1].w, temp2.w);
 
 				Coord dP = (p1 - p1Bar);
-				if (dP.norm() < EPSILON || dP.norm() > -EPSILON)
-					dP = Coord(0.0f);
 				Coord dP_t = dP - (dP.dot(n)) * n;
-				if (dP_t.norm() < EPSILON || dP_t.norm() > -EPSILON)
-					dP_t = Coord(0.0f);
 
 				Real dLambdaT = ((-dP_t.norm() - tildeAlpha * lambdaT[pId]) / (w1 + w2 + tildeAlpha));
 				dLambdaT *= 1 / stepInv[idx1];
+				if (dLambdaT > 0)
+					dLambdaT = 0.0f;
 				lambdaT[pId] += dLambdaT;
 
 				if (lambdaT[pId] > miuS[idx1] * lambdaN[pId])
@@ -428,21 +424,24 @@ namespace dyno
 
 			Coord dv = Coord(0.0f);
 			if (abs(v_n) < h * 9.8f * 2)
-				dv += n * (-v_n) / (stepInv[idx1]+ stepInv[idx2]);
+				dv += n * (-v_n);
 			else
-				dv += n * (-v_n - 0.5f * v_n_prev) / (stepInv[idx1]+ stepInv[idx2]);
+				dv += n * (-v_n-0.5f* v_n_prev);
 
 			if (v_t.norm() > 0)
 			{
 				Real miu_d = (miu[idx1] + miu[idx2]) / 2;
-				dv += (v_t / v_t.norm() * min(h * miu_d * (lambda[pId] * 1000.0f / h / h), v_t.norm())) ;
+				if (v_t.norm() < EPSILON)
+					dv += -v_t;
+				else
+					dv += -(v_t / v_t.norm() * min(h * miu_d * (abs(lambda[pId])*3000.0f / h / h), v_t.norm())) ;
 
 				Coord temp1 = r1.cross(n);
 				Coord temp2 = r2.cross(n);
 
 				Real w1 = 1.0f / m[idx1] + (Real)(temp1.dot(I[idx1].inverse() * temp1));
 				Real w2 = 1.0f / m[idx2] + (Real)(temp2.dot(I[idx2].inverse() * temp2));
-				Coord p = dv / (w1 + w2);
+				Coord p = dv / (w1 + w2) / (stepInv[idx1] + stepInv[idx2]);
 
 				Coord temp3 = I[idx1].inverse() * (r1.cross(p));
 				Coord temp4 = I[idx2].inverse() * (r2.cross(p));
@@ -477,22 +476,26 @@ namespace dyno
 
 			Coord dv = Coord(0.0f);
 			if(abs(v_n)<h*9.8f*2)
-				dv += n * (-v_n) / (stepInv[idx1]);
+				dv += n * (-v_n);
 			else
-				dv += n * (-v_n - 0.5f * v_n_prev) / (stepInv[idx1]);
+				dv += n * (-v_n - 0.5f * v_n_prev);
+			
 
 			//printf("%.10f\t%.10f\n", v_n, v_n_prev);
 
 			if (v_t.norm() > 0)
 			{
 				Real miu_d = miu[idx1];
-				dv += (v_t / v_t.norm() * min(h * miu_d * (lambda[pId] * 1000.0f / h / h), v_t.norm()));
+				if (v_t.norm() < EPSILON)
+					dv += -v_t;
+				else
+					dv += -(v_t / v_t.norm() * min(h * miu_d * (abs(lambda[pId]) * 3000.0f / h / h), v_t.norm()));
 
 				Coord temp1 = r1.cross(n);
 
 				Real w1 = 1.0f / m[idx1] + temp1.dot(I[idx1].inverse() * temp1);
 				Real w2 = 0.0f;
-				Coord p = dv / (w1 + w2);
+				Coord p = dv / (w1 + w2)/stepInv[idx1];
 
 				Coord temp3 = I[idx1].inverse() * (r1.cross(p));
 
