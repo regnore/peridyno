@@ -25,6 +25,7 @@ namespace dyno
 		typedef typename Quat<Real> TQuat;
 
 		typedef typename TContactPair<Real> ContactPair;
+		typedef typename Joint<Real> Joint;
 
 
 		PBDRigidBodySystem(std::string name = "RigidBodySystem");
@@ -46,7 +47,7 @@ namespace dyno
 			const Real density = Real(1));
 
 		void addJoint(
-			const Joint<Real>& j
+			const Joint& j
 		);
 
 	protected:
@@ -55,7 +56,8 @@ namespace dyno
 		void updateTopology() override;
 
 	public:
-		DEF_VAR(bool, FrictionEnabled, true, "A toggle to control the friction");
+		DEF_VAR(bool, DynamicFrictionEnabled, true, "A toggle to control the dynamic friction");
+		DEF_VAR(bool, StaticFrictionEnabled, false, "A toggle to control the static friction");
 
 		DEF_INSTANCE_STATE(TopologyModule, Topology, "Topology");
 
@@ -104,18 +106,22 @@ namespace dyno
 
 		DEF_ARRAY_STATE(Matrix, InitialInertia, DeviceType::GPU, "Initial inertia matrix");
 
+		DEF_ARRAY_STATE(Joint, Joint, DeviceType::GPU, "Joints");
+
 	private:
 		std::vector<RigidBodyInfo> mHostRigidBodyStates;
 
 		std::vector<SphereInfo> mHostSpheres;
 		std::vector<BoxInfo> mHostBoxes;
 		std::vector<TetInfo> mHostTets;
+		std::vector<Joint> mHostJoints;
 
 		DArray<RigidBodyInfo> mDeviceRigidBodyStates;
 
 		DArray<SphereInfo> mDeviceSpheres;
 		DArray<BoxInfo> mDeviceBoxes;
 		DArray<TetInfo> mDeviceTets;
+		DArray<Joint> mDeviceJoints;
 
 	public:
 		int m_numOfSamples;

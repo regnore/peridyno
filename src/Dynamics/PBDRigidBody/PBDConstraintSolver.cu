@@ -1,151 +1,19 @@
-#include "PBDIterativeConstraintSolver.h"
+#include "PBDConstraintSolver.h"
 
 namespace dyno
 {
-	IMPLEMENT_TCLASS(PBDIterativeConstraintSolver, TDataType)
+	IMPLEMENT_TCLASS(PBDConstraintSolver, TDataType)
 
 	template<typename TDataType>
-	PBDIterativeConstraintSolver<TDataType>::PBDIterativeConstraintSolver()
+	PBDConstraintSolver<TDataType>::PBDConstraintSolver()
 		: ConstraintModule()
 	{
 		this->inContacts()->tagOptional(true);
 	}
 
 	template<typename TDataType>
-	PBDIterativeConstraintSolver<TDataType>::~PBDIterativeConstraintSolver()
+	PBDConstraintSolver<TDataType>::~PBDConstraintSolver()
 	{
-	}
-
-	template <typename Coord, typename ContactPair>
-	__global__ void TakeOneJacobiIteration(
-		DArray<Real> lambda,
-		DArray<Coord> accel,
-		DArray<Real> d,
-		DArray<Coord> J,
-		DArray<Coord> B,
-		DArray<Real> eta,
-		DArray<Real> mass,
-		DArray<ContactPair> nbq,
-		DArray<Real> stepInv)
-	{
-		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
-		if (pId >= J.size() / 4) return;
-
-		int idx1 = nbq[pId].bodyId1;
-		int idx2 = nbq[pId].bodyId2;
-
-		Real eta_i = eta[pId];
-		{
-			eta_i -= J[4 * pId].dot(accel[idx1 * 2]);
-			eta_i -= J[4 * pId + 1].dot(accel[idx1 * 2 + 1]);
-			if (idx2 != -1)
-			{
-				eta_i -= J[4 * pId + 2].dot(accel[idx2 * 2]);
-				eta_i -= J[4 * pId + 3].dot(accel[idx2 * 2 + 1]);
-			}
-		}
-
-		if (d[pId] > EPSILON)
-		{
-			Real delta_lambda = eta_i / d[pId];
-			Real stepInverse = stepInv[idx1];
-			if (idx2 != -1)
-				stepInverse += stepInv[idx2];
-			delta_lambda *= (1.0f / stepInverse);
-
-			//printf("delta_lambda = %.3lf\n", delta_lambda);
-
-			if (nbq[pId].contactType == ContactType::CT_NONPENETRATION || nbq[pId].contactType == ContactType::CT_BOUDNARY) //	PROJECTION!!!!
-			{
-				Real lambda_new = lambda[pId] + delta_lambda;
-				if (lambda_new < 0) lambda_new = 0;
-
-				Real mass_i = mass[idx1];
-				if (idx2 != -1)
-					mass_i += mass[idx2];
-
-				if (lambda_new > 25 * (mass_i / 0.1)) lambda_new = 25 * (mass_i / 0.1);
-				delta_lambda = lambda_new - lambda[pId];
-			}
-
-			if (nbq[pId].contactType == ContactType::CT_FRICTION) //	PROJECTION!!!!
-			{
-				Real lambda_new = lambda[pId] + delta_lambda;
-				Real mass_i = mass[idx1];
-				if (idx2 != -1)
-					mass_i += mass[idx2];
-
-				//if ((lambda_new) > 5 * (mass_i)) lambda_new = 5 * (mass_i);
-				//if ((lambda_new) < -5 * (mass_i)) lambda_new = -5 * (mass_i);
-				delta_lambda = lambda_new - lambda[pId];
-			}
-
-			lambda[pId] += delta_lambda;
-
-			//printf("inside iteration: %d %d %.5lf   %.5lf\n", idx1, idx2, nbq[pId].s4, delta_lambda);
-
-			atomicAdd(&accel[idx1 * 2][0], B[4 * pId][0] * delta_lambda);
-			atomicAdd(&accel[idx1 * 2][1], B[4 * pId][1] * delta_lambda);
-			atomicAdd(&accel[idx1 * 2][2], B[4 * pId][2] * delta_lambda);
-
-			atomicAdd(&accel[idx1 * 2 + 1][0], B[4 * pId + 1][0] * delta_lambda);
-			atomicAdd(&accel[idx1 * 2 + 1][1], B[4 * pId + 1][1] * delta_lambda);
-			atomicAdd(&accel[idx1 * 2 + 1][2], B[4 * pId + 1][2] * delta_lambda);
-
-			if (idx2 != -1)
-			{
-				atomicAdd(&accel[idx2 * 2][0], B[4 * pId + 2][0] * delta_lambda);
-				atomicAdd(&accel[idx2 * 2][1], B[4 * pId + 2][1] * delta_lambda);
-				atomicAdd(&accel[idx2 * 2][2], B[4 * pId + 2][2] * delta_lambda);
-
-				atomicAdd(&accel[idx2 * 2 + 1][0], B[4 * pId + 3][0] * delta_lambda);
-				atomicAdd(&accel[idx2 * 2 + 1][1], B[4 * pId + 3][1] * delta_lambda);
-				atomicAdd(&accel[idx2 * 2 + 1][2], B[4 * pId + 3][2] * delta_lambda);
-			}
-		}
-	}
-
-	template <typename Coord>
-	__global__ void RB_UpdateVelocity(
-		DArray<Coord> velocity,
-		DArray<Coord> angular_velocity,
-		DArray<Coord> accel,
-		Real dt)
-	{
-		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
-		if (pId >= accel.size() / 2) return;
-
-		velocity[pId] += accel[2 * pId] * dt;
-		velocity[pId] += Coord(0, -9.8f, 0) * dt;
-
-		angular_velocity[pId] += accel[2 * pId + 1] * dt;
-	}
-
-	template <typename Coord, typename Matrix, typename Quat>
-	__global__ void RB_UpdateGesture(
-		DArray<Coord> pos,
-		DArray<Quat> rotQuat,
-		DArray<Matrix> rotMat,
-		DArray<Matrix> inertia,
-		DArray<Coord> velocity,
-		DArray<Coord> angular_velocity,
-		DArray<Matrix> inertia_init,
-		Real dt)
-	{
-		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
-		if (pId >= pos.size()) return;
-
-		pos[pId] += velocity[pId] * dt;
-
-		rotQuat[pId] = rotQuat[pId].normalize();
-		rotMat[pId] = rotQuat[pId].toMatrix3x3();
-
-		rotQuat[pId] += dt * 0.5f *
-			Quat(angular_velocity[pId][0], angular_velocity[pId][1], angular_velocity[pId][2], 0.0)
-			*(rotQuat[pId]);
-
-		inertia[pId] = rotMat[pId] * inertia_init[pId] * rotMat[pId].inverse();
-		//inertia[pId] = rotMat[pId] * rotMat[pId].inverse();
 	}
 
 	template <typename Coord, typename Real>
@@ -239,6 +107,7 @@ namespace dyno
 		DArray<Real> miuS,
 		DArray<ContactPair> nbq,
 		DArray<Real> stepInv,
+		bool staticFrictionEnabled,
 		Real h)
 	{
 		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
@@ -261,8 +130,8 @@ namespace dyno
 				Coord p1 = x[idx1] + r1;
 				Coord p2 = x[idx2] + r2;
 
-				Coord p1Bar = x_prev[idx1] + r1;
-				Coord p2Bar = x_prev[idx2] + r2;
+				Coord p1Bar = x_prev[idx1] + (q_prev[idx1] * q[idx1].inverse()).rotate(r1);
+				Coord p2Bar = x_prev[idx2] + (q_prev[idx2] * q[idx2].inverse()).rotate(r2);
 
 				Coord temp3 = r1.cross(n);
 				Coord temp4 = r2.cross(n);
@@ -300,7 +169,11 @@ namespace dyno
 				atomicAdd(&q[idx2].w, -temp6.w);
 
 				Coord dP = (p1 - p1Bar) - (p2 - p2Bar);
+				if (dP.norm() > 0.01f || dP.norm() < EPSILON)
+					dP = Coord(0.0f);
 				Coord dP_t = dP - (dP.dot(n)) * n;
+				if (dP_t.norm() > 0.01f || dP_t.norm() < EPSILON)
+					dP_t = Coord(0.0f);
 
 				Real dLambdaT = ((-dP_t.norm() - tildeAlpha * lambdaT[pId]) / (w1 + w2 + tildeAlpha));
 				dLambdaT *= 1 / (stepInv[idx1] + stepInv[idx2]);
@@ -308,7 +181,7 @@ namespace dyno
 					dLambdaT = 0.0f;
 				lambdaT[pId] += dLambdaT;
 
-				if (lambdaT[pId] > (miuS[idx1] + miuS[idx2]) / 2 * lambdaN[pId])
+				if (staticFrictionEnabled && lambdaT[pId] > (miuS[idx1] + miuS[idx2]) / 2 * lambdaN[pId])
 				{
 					Coord temp7 = I[idx1].inverse() * (r1.cross(dP_t));
 					Coord temp8 = I[idx2].inverse() * (r2.cross(dP_t));
@@ -338,7 +211,7 @@ namespace dyno
 			{
 				Coord r1 = nbq[pId].pos1 - x[idx1];
 				Coord p1 = x[idx1] + r1;
-				Coord p1Bar = x_prev[idx1] + r1;
+				Coord p1Bar = x_prev[idx1] + (q_prev[idx1] * q[idx1].inverse()).rotate(r1);
 				//printf("%f\t%f\t%f\n",p1Bar[0], p1Bar[1], p1Bar[2]);
 				Coord temp3 = r1.cross(n);
 
@@ -360,15 +233,18 @@ namespace dyno
 				atomicAdd(&q[idx1].w, temp2.w);
 
 				Coord dP = (p1 - p1Bar);
+				if (dP.norm() > 0.01f || dP.norm() < EPSILON)
+					dP = Coord(0.0f);
 				Coord dP_t = dP - (dP.dot(n)) * n;
-
+				if (dP_t.norm() > 0.01f||dP_t.norm()<EPSILON)
+					dP_t = Coord(0.0f);
 				Real dLambdaT = ((-dP_t.norm() - tildeAlpha * lambdaT[pId]) / (w1 + w2 + tildeAlpha));
 				dLambdaT *= 1 / stepInv[idx1];
 				if (dLambdaT > 0)
 					dLambdaT = 0.0f;
 				lambdaT[pId] += dLambdaT;
 
-				if (lambdaT[pId] > miuS[idx1] * lambdaN[pId])
+				if (staticFrictionEnabled && lambdaT[pId] > miuS[idx1] * lambdaN[pId])
 				{
 					Coord temp7 = I[idx1].inverse() * (r1.cross(dP_t));
 					Quat temp9 = Quat(temp7[0], temp7[1], temp7[2], 0) * q[idx1] * 0.5f;
@@ -387,6 +263,68 @@ namespace dyno
 		}
 	}
 
+	template <typename Coord, typename Quat, typename Matrix, typename Real,typename Joint>
+	__global__ void PBDRB_SolveJoint(
+		DArray<Coord> x,
+		DArray<Quat> q,
+		DArray<Real> m,
+		DArray<Matrix> I,
+		DArray<Joint> joint,
+		DArray<Real> lambdaJ ,
+		Real h)
+	{
+		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
+		if (pId >= joint.size()) return;
+
+		int idx1 = joint[pId].bodyId1;
+		int idx2 = joint[pId].bodyId2;
+
+		Coord r1 = q[idx1].rotate(joint[pId].offset1);
+		Coord r2 = q[idx2].rotate(joint[pId].offset2);
+		Coord n = -(x[idx2] + r2) + (x[idx1] + r1);
+		Real c = n.norm();
+		n /= n.norm();
+
+		Real tildeAlpha = joint[pId].alpha / h / h;
+
+		if (c > 0)
+		{
+			Coord temp1 = r1.cross(n);
+			Coord temp2 = r2.cross(n);
+
+			Real w1 = 1.0f / m[idx1] + (Real)(temp1.dot(I[idx1].inverse() * temp1));
+			Real w2 = 1.0f / m[idx2] + (Real)(temp2.dot(I[idx2].inverse() * temp2));
+
+			Real dLambdaJ = ((-c - tildeAlpha * lambdaJ[pId]) / (w1 + w2 + tildeAlpha));
+			lambdaJ[pId] += dLambdaJ;
+
+			Coord p = dLambdaJ * n;
+
+			Coord temp3 = I[idx1].inverse() * (r1.cross(p));
+			Coord temp4 = I[idx2].inverse() * (r2.cross(p));
+			Quat temp5 = Quat(temp3[0], temp3[1], temp3[2], 0) * q[idx1] * 0.5f;
+			Quat temp6 = Quat(temp4[0], temp4[1], temp4[2], 0) * q[idx2] * 0.5f;
+
+			atomicAdd(&x[idx1][0], p[0] / m[idx1]);
+			atomicAdd(&x[idx1][1], p[1] / m[idx1]);
+			atomicAdd(&x[idx1][2], p[2] / m[idx1]);
+
+			atomicAdd(&x[idx2][0], -p[0] / m[idx2]);
+			atomicAdd(&x[idx2][1], -p[1] / m[idx2]);
+			atomicAdd(&x[idx2][2], -p[2] / m[idx2]);
+
+			atomicAdd(&q[idx1].x, temp5.x);
+			atomicAdd(&q[idx1].y, temp5.y);
+			atomicAdd(&q[idx1].z, temp5.z);
+			atomicAdd(&q[idx1].w, temp5.w);
+
+			atomicAdd(&q[idx2].x, -temp6.x);
+			atomicAdd(&q[idx2].y, -temp6.y);
+			atomicAdd(&q[idx2].z, -temp6.z);
+			atomicAdd(&q[idx2].w, -temp6.w);
+		}
+	}
+
 	template <typename Coord, typename Matrix, typename Real, typename ContactPair>
 	__global__ void PBDRB_SolveVelocities(
 		DArray<Coord> x,
@@ -400,6 +338,7 @@ namespace dyno
 		DArray<Real> miu,
 		DArray<ContactPair> nbq,
 		DArray<Real> stepInv,
+		Real restituteCoef,
 		Real h) 
 	{
 		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
@@ -478,7 +417,7 @@ namespace dyno
 			if(abs(v_n)<h*9.8f*2)
 				dv += n * (-v_n);
 			else
-				dv += n * (-v_n - 0.5f * v_n_prev);
+				dv += n * (-v_n - restituteCoef * v_n_prev);
 			
 
 			//printf("%.10f\t%.10f\n", v_n, v_n_prev);
@@ -512,12 +451,14 @@ namespace dyno
 	}
 
 	template<typename TDataType>
-	void PBDIterativeConstraintSolver<TDataType>::constrain()
+	void PBDConstraintSolver<TDataType>::constrain()
 	{
 		uint num = this->inCenter()->size();
 		Real dt = this->inTimeStep()->getData();
 		uint numSubsteps = this->varNumSubsteps()->getData();
 		Real h = dt / numSubsteps;
+
+		//printf("%d\n",this->inJoint()->size());
 
 		if (this->x_prev.size() == 0)
 			this->x_prev.resize(num);
@@ -554,12 +495,14 @@ namespace dyno
 			h);
 
 		uint numC = 0;
-		if (this->inContacts()->size() > 0)
+		uint numJ = 0;
+		if (this->inContacts()->size() > 0 || this->inJoint()->size()>0)
 		{
 			this->initialize();
 			numC = this->inContacts()->size();
+			numJ = this->inJoint()->size();
 		}
-
+	
 		if (numC > 0)
 		{
 			cuExecute(numC,
@@ -576,16 +519,38 @@ namespace dyno
 				this->inStaticFriction()->getData(),
 				this->mAllConstraints,
 				this->mContactNumber,
+				this->varStaticFrictionEnabled()->getData(),
 				h);
-
-			cuExecute(
-				num,
-				PBDRB_UpdateRI,
-				this->inQuaternion()->getData(),
-				this->inInitialInertia()->getData(),
-				this->inInertia()->getData(),
-				this->inRotationMatrix()->getData());
 		}
+
+		cuExecute(
+			num,
+			PBDRB_UpdateRI,
+			this->inQuaternion()->getData(),
+			this->inInitialInertia()->getData(),
+			this->inInertia()->getData(),
+			this->inRotationMatrix()->getData());
+
+		if (numJ > 0)
+		{
+			cuExecute(numJ,
+				PBDRB_SolveJoint,
+				this->inCenter()->getData(),
+				this->inQuaternion()->getData(),
+				this->inMass()->getData(),
+				this->inInertia()->getData(),
+				this->inJoint()->getData(),
+				this->mLambdaJ,
+				h);
+		}
+
+		cuExecute(
+			num,
+			PBDRB_UpdateRI,
+			this->inQuaternion()->getData(),
+			this->inInitialInertia()->getData(),
+			this->inInertia()->getData(),
+			this->inRotationMatrix()->getData());
 
 		cuExecute(
 			num,
@@ -600,7 +565,7 @@ namespace dyno
 			this->w_prev,
 			h);
 
-		if (this->varFrictionEnabled()->getData())
+		if (this->varDynamicFrictionEnabled()->getData())
 		{
 			if (numC > 0)
 			{
@@ -618,12 +583,14 @@ namespace dyno
 					this->inDynamicFriction()->getData(),
 					this->mAllConstraints,
 					this->mContactNumber,
+					this->varRestituteCoef()->getData(),
 					h);
 			}
 		}
 
 		this->mLambdaN.reset();
 		this->mLambdaT.reset();
+		this->mLambdaJ.reset();
 		this->mAllConstraints.reset();
 	}
 
@@ -644,198 +611,8 @@ namespace dyno
 			atomicAdd(&nbrCnt[idx2], 1.0f);
 	}
 
-	template <typename Coord, typename Matrix, typename ContactPair>
-	__global__ void CalculateJacobians(
-		DArray<Coord> J,
-		DArray<Coord> B,
-		DArray<Coord> pos,
-		DArray<Matrix> inertia,
-		DArray<Real> mass,
-		DArray<ContactPair> nbc)
-	{
-		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
-		if (pId >= J.size() / 4) return;
-
-		int idx1 = nbc[pId].bodyId1;
-		int idx2 = nbc[pId].bodyId2;
-
-		//printf("%d %d\n", idx1, idx2);
-
-		if (nbc[pId].contactType == ContactType::CT_NONPENETRATION) // contact, collision
-		{
-			Coord p1 = nbc[pId].pos1;
-			Coord p2 = nbc[pId].pos2;
-			Coord n = nbc[pId].normal1;
-			Coord r1 = p1 - pos[idx1];
-			Coord r2 = p2 - pos[idx2];
-
-			J[4 * pId] = n;
-			J[4 * pId + 1] = (r1.cross(n));
-			J[4 * pId + 2] = -n;
-			J[4 * pId + 3] = -(r2.cross(n));
-
-			B[4 * pId] = n / mass[idx1];
-			B[4 * pId + 1] = inertia[idx1].inverse() * (r1.cross(n));
-			B[4 * pId + 2] = -n / mass[idx2];
-			B[4 * pId + 3] = inertia[idx2].inverse() * (-r2.cross(n));
-		}
-		else if (nbc[pId].contactType == ContactType::CT_BOUDNARY) // boundary
-		{
-			Coord p1 = nbc[pId].pos1;
-			//	printf("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ %d %.3lf %.3lf %.3lf\n", idx1, p1[0], p1[1], p1[2]);
-
-			Coord n = nbc[pId].normal1;
-			Coord r1 = p1 - pos[idx1];
-
-
-			J[4 * pId] = n;
-			J[4 * pId + 1] = (r1.cross(n));
-			J[4 * pId + 2] = Coord(0);
-			J[4 * pId + 3] = Coord(0);
-
-			B[4 * pId] = n / mass[idx1];
-			B[4 * pId + 1] = inertia[idx1].inverse() * (r1.cross(n));
-			B[4 * pId + 2] = Coord(0);
-			B[4 * pId + 3] = Coord(0);
-		}
-		else if (nbc[pId].contactType == ContactType::CT_FRICTION) // friction
-		{
-			Coord p1 = nbc[pId].pos1;
-			//printf("~~~~~~~ %.3lf %.3lf %.3lf\n", p1[0], p1[1], p1[2]);
-
-
-			Coord p2 = Coord(0);
-			if (idx2 != -1)
-				p2 = nbc[pId].pos2;
-
-			Coord n = nbc[pId].normal1;
-			Coord r1 = p1 - pos[idx1];
-			Coord r2 = Coord(0);
-			if (idx2 != -1)
-				r2 = p2 - pos[idx2];
-
-			J[4 * pId] = n;
-			J[4 * pId + 1] = (r1.cross(n));
-			if (idx2 != -1)
-			{
-				J[4 * pId + 2] = -n;
-				J[4 * pId + 3] = -(r2.cross(n));
-			}
-			else
-			{
-				J[4 * pId + 2] = Coord(0);
-				J[4 * pId + 3] = Coord(0);
-			}
-			B[4 * pId] = n / mass[idx1];
-			B[4 * pId + 1] = inertia[idx1].inverse() * (r1.cross(n));
-			if (idx2 != -1)
-			{
-				B[4 * pId + 2] = -n / mass[idx2];
-				B[4 * pId + 3] = inertia[idx2].inverse() * (-r2.cross(n));
-			}
-			else
-			{
-				B[4 * pId + 2] = Coord(0);
-				B[4 * pId + 3] = Coord(0);
-			}
-		}
-	}
-
-	template <typename Coord>
-	__global__ void CalculateDiagonals(
-		DArray<Real> D,
-		DArray<Coord> J,
-		DArray<Coord> B)
-	{
-		int tId = threadIdx.x + (blockIdx.x * blockDim.x);
-		if (tId >= J.size() / 4) return;
-
-		Real d = Real(0);
-		d += J[4 * tId].dot(B[4 * tId]);
-		d += J[4 * tId + 1].dot(B[4 * tId + 1]);
-		d += J[4 * tId + 2].dot(B[4 * tId + 2]);
-		d += J[4 * tId + 3].dot(B[4 * tId + 3]);
-
-		D[tId] = d;
-	}
-
-	// ignore zeta !!!!!!
-	template <typename Coord, typename ContactPair>
-	__global__ void CalculateEta(
-		DArray<Real> eta,
-		DArray<Coord> velocity,
-		DArray<Coord> angular_velocity,
-		DArray<Coord> J,
-		DArray<Real> mass,
-		DArray<ContactPair> nbq,
-		Real dt)
-	{
-		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
-		if (pId >= J.size() / 4) return;
-
-		int idx1 = nbq[pId].bodyId1;
-		int idx2 = nbq[pId].bodyId2;
-		//printf("from ita %d\n", pId);
-		Real ita_i = Real(0);
-		if (true) // test dist constraint
-		{
-			ita_i -= J[4 * pId].dot(velocity[idx1]);
-			ita_i -= J[4 * pId + 1].dot(angular_velocity[idx1]);
-			if (idx2 != -1)
-			{
-				ita_i -= J[4 * pId + 2].dot(velocity[idx2]);
-				ita_i -= J[4 * pId + 3].dot(angular_velocity[idx2]);
-			}
-		}
-		eta[pId] = ita_i / dt;
-		if (nbq[pId].contactType == ContactType::CT_NONPENETRATION || nbq[pId].contactType == ContactType::CT_BOUDNARY)
-		{
-			eta[pId] += min(nbq[pId].interpenetration, nbq[pId].interpenetration) / dt / dt / 15.0f;
-		}
-	}
-
-	template <typename ContactPair>
-	__global__ void SetupFrictionConstraints(
-		DArray<ContactPair> nbq,
-		int contact_size)
-	{
-		int pId = threadIdx.x + (blockIdx.x * blockDim.x);
-		if (pId >= contact_size) return;
-
-		Coord3D n = nbq[pId].normal1;
-		n /= n.norm();
-
-		Coord3D n1, n2;
-		if (abs(n[1]) > EPSILON || abs(n[2]) > EPSILON)
-		{
-			n1 = Coord3D(0, n[2], -n[1]);
-			n1 /= n1.norm();
-			n2 = n1.cross(n);
-			n2 /= n2.norm();
-		}
-		else if (abs(n[0]) > EPSILON)
-		{
-			n1 = Coord3D(n[2], 0, -n[0]);
-			n1 /= n1.norm();
-			n2 = n1.cross(n);
-			n2 /= n2.norm();
-		}
-
-		nbq[pId * 2 + contact_size].bodyId1 = nbq[pId].bodyId1;
-		nbq[pId * 2 + contact_size].bodyId2 = nbq[pId].bodyId2;
-		nbq[pId * 2 + contact_size] = nbq[pId];
-		nbq[pId * 2 + contact_size].contactType = ContactType::CT_FRICTION;
-		nbq[pId * 2 + contact_size].normal1 = n1;
-
-		nbq[pId * 2 + 1 + contact_size].bodyId1 = nbq[pId].bodyId1;
-		nbq[pId * 2 + 1 + contact_size].bodyId2 = nbq[pId].bodyId2;
-		nbq[pId * 2 + 1 + contact_size] = nbq[pId];
-		nbq[pId * 2 + 1 + contact_size].contactType = ContactType::CT_FRICTION;
-		nbq[pId * 2 + 1 + contact_size].normal1 = n2;
-	}
-
 	template<typename TDataType>
-	void PBDIterativeConstraintSolver<TDataType>::initialize()
+	void PBDConstraintSolver<TDataType>::initialize()
 	{
 		if (this->inContacts()->isEmpty())
 			return;
@@ -844,6 +621,8 @@ namespace dyno
 		int sizeOfContacts = contacts.size();
 		int sizeOfConstraints = sizeOfContacts;
 
+		int sizeOfJoints = this->inJoint()->size();
+
 		mAllConstraints.resize(sizeOfConstraints);
 
 		if (contacts.size() > 0)
@@ -851,6 +630,7 @@ namespace dyno
 
 		mLambdaN.resize(sizeOfConstraints);
 		mLambdaT.resize(sizeOfConstraints);
+		mLambdaJ.resize(sizeOfJoints);
 		mAlpha.resize(sizeOfConstraints);
 
 		auto sizeOfRigids = this->inCenter()->size();
@@ -858,6 +638,7 @@ namespace dyno
 
 		mLambdaN.reset();
 		mLambdaT.reset();
+		mLambdaJ.reset();
 		mContactNumber.reset();
 		mAlpha.reset();
 
@@ -870,101 +651,5 @@ namespace dyno
 		);
 	}
 
-	template<typename TDataType>
-	void PBDIterativeConstraintSolver<TDataType>::initializeJacobian(Real dt)
-	{
-		//int sizeOfContacts = mBoundaryContacts.size() + contacts.size();
-
-		if (this->inContacts()->isEmpty())
-			return;
-
-		auto& contacts = this->inContacts()->getData();
-		int sizeOfContacts = contacts.size();
- 		int sizeOfConstraints = sizeOfContacts;
-		if (this->varFrictionEnabled()->getData())
-		{
-			sizeOfConstraints += 2 * sizeOfContacts;
-		}
-
-		mAllConstraints.resize(sizeOfConstraints);
-
-		if (contacts.size() > 0)
-			mAllConstraints.assign(contacts, contacts.size(), 0, 0);
-
-		if (this->varFrictionEnabled()->getData())
-		{
-			cuExecute(sizeOfContacts,
-				SetupFrictionConstraints,
-				mAllConstraints,
-				sizeOfContacts);
-		}
-
-
-		mJ.resize(4 * sizeOfConstraints);
-		mB.resize(4 * sizeOfConstraints);
-		mD.resize(sizeOfConstraints);
-		mEta.resize(sizeOfConstraints);
-		mLambdaN.resize(sizeOfConstraints);
-
-		auto sizeOfRigids = this->inCenter()->size();
-		mContactNumber.resize(sizeOfRigids);
-
-		mJ.reset();
-		mB.reset();
-		mD.reset();
-		mEta.reset();
-		mLambdaN.reset();
-		mContactNumber.reset();
-
-		if (sizeOfConstraints == 0) 
-			return;
-
-// 		if (contacts.size() > 0)
-// 			mAllConstraints.assign(contacts, contacts.size());
-// 
-// 		if (mBoundaryContacts.size() > 0)
-// 			mAllConstraints.assign(mBoundaryContacts, mBoundaryContacts.size(), contacts.size(), 0);
-
-// 		if (this->varFrictionEnabled()->getData())
-// 		{
-// 			cuExecute(sizeOfContacts,
-// 				SetupFrictionConstraints,
-// 				mAllConstraints,
-// 				sizeOfContacts);
-// 		}
-		cuExecute(sizeOfConstraints,
-			CalculateNbrCons,
-			mAllConstraints,
-			mContactNumber
-		);
-
-		cuExecute(sizeOfConstraints,
-			CalculateJacobians,
-			mJ,
-			mB,
-			this->inCenter()->getData(),
-			this->inInertia()->getData(),
-			this->inMass()->getData(),
-			mAllConstraints);
-
-		cuExecute(sizeOfConstraints,
-			CalculateDiagonals,
-			mD,
-			mJ,
-			mB);
-
-		cuExecute(sizeOfConstraints,
-			CalculateEta,
-			mEta,
-			this->inVelocity()->getData(),
-			this->inAngularVelocity()->getData(),
-			mJ,
-			this->inMass()->getData(),
-			mAllConstraints,
-			dt);
-	}
-
-
-
-	DEFINE_CLASS(PBDIterativeConstraintSolver);
+	DEFINE_CLASS(PBDConstraintSolver);
 }

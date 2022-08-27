@@ -4,7 +4,7 @@
 #include "Collision/NeighborElementQuery.h"
 #include "Collision/CollistionDetectionBoundingBox.h"
 #include <cuda_runtime.h>
-#include "PBDIterativeConstraintSolver.h"
+#include "PBDConstraintSolver.h"
 
 //Module headers
 #include "PBDContactsUnion.h"
@@ -37,9 +37,10 @@ namespace dyno
 		cdBV->outContacts()->connect(merge->inContactsB());
 		this->animationPipeline()->pushModule(merge);
 
-		auto iterSolver = std::make_shared<PBDIterativeConstraintSolver<TDataType>>();
+		auto iterSolver = std::make_shared<PBDConstraintSolver<TDataType>>();
 		this->stateTimeStep()->connect(iterSolver->inTimeStep());
-		this->varFrictionEnabled()->connect(iterSolver->varFrictionEnabled());
+		this->varDynamicFrictionEnabled()->connect(iterSolver->varDynamicFrictionEnabled());
+		this->varStaticFrictionEnabled()->connect(iterSolver->varStaticFrictionEnabled());
 		this->stateMass()->connect(iterSolver->inMass());
 		this->stateCenter()->connect(iterSolver->inCenter());
 		this->stateVelocity()->connect(iterSolver->inVelocity());
@@ -50,6 +51,7 @@ namespace dyno
 		this->stateInitialInertia()->connect(iterSolver->inInitialInertia());
 		this->stateDynamicFriction()->connect(iterSolver->inDynamicFriction());
 		this->stateStaticFriction()->connect(iterSolver->inStaticFriction());
+		this->stateJoint()->connect(iterSolver->inJoint());
 
 		merge->outContacts()->connect(iterSolver->inContacts());
 
@@ -144,12 +146,15 @@ namespace dyno
 		mHostTets.push_back(b);
 	}
 
-	/*template<typename TDataType>
+	template<typename TDataType>
 	void PBDRigidBodySystem<TDataType>::addJoint(
-		const Joint<Real>& j)
+		const Joint& j)
 	{
-		mJoint.push_back(j);
-	}*/
+		mHostBoxes[j.bodyId2].center += (mHostBoxes[j.bodyId1].center+ mHostBoxes[j.bodyId1].rot.rotate(j.offset1))- (mHostBoxes[j.bodyId2].center + mHostBoxes[j.bodyId2].rot.rotate(j.offset2));
+		mHostRigidBodyStates[j.bodyId1].position = mHostBoxes[j.bodyId1].center;
+		mHostRigidBodyStates[j.bodyId2].position = mHostBoxes[j.bodyId2].center;
+		mHostJoints.push_back(j);
+	}
 
 	template <typename Real, typename Coord, typename Matrix, typename Quat>
 	__global__ void PBDRB_SetupInitialStates(
@@ -231,6 +236,8 @@ namespace dyno
 		mDeviceBoxes.assign(mHostBoxes);
 		mDeviceSpheres.assign(mHostSpheres);
 		mDeviceTets.assign(mHostTets);
+
+		this->stateJoint()->assign(mHostJoints);
 
 		auto& boxes = topo->getBoxes();
 		auto& spheres = topo->getSpheres();
@@ -408,6 +415,7 @@ namespace dyno
 		m_angularvelocity[0] *= m_damping;
 		//printf("come come le \n");
 	}
+
 	template<typename TDataType>
 	void PBDRigidBodySystem<TDataType>::updateVelocityAngule(Vec3f force, Vec3f torque, float dt)
 	{

@@ -1,32 +1,14 @@
-/**
- * Copyright 2021 Yue Chang
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      https://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 #pragma once
 #include "Module/ConstraintModule.h"
 #include "PBDRigidBodyShared.h"
+#include "Joint.h"
 
 namespace dyno
 {
-	/**
-	 * @brief Implementation of an iterative constraint solver for rigid body dynamics with contact.
-	 * 			Refer to "Iterative Dynamics with Temporal Coherence" by Erin Catto, 2005.
-	 */
 	template<typename TDataType>
-	class PBDIterativeConstraintSolver : public ConstraintModule
+	class PBDConstraintSolver : public ConstraintModule
 	{
-		DECLARE_TCLASS(PBDIterativeConstraintSolver, TDataType)
+		DECLARE_TCLASS(PBDConstraintSolver, TDataType)
 	public:
 		typedef typename TDataType::Real Real;
 		typedef typename TDataType::Coord Coord;
@@ -34,14 +16,19 @@ namespace dyno
 		
 		typedef typename Quat<Real> TQuat;
 		typedef typename TContactPair<Real> ContactPair;
+		typedef typename Joint<Real> Joint;
 		
-		PBDIterativeConstraintSolver();
-		~PBDIterativeConstraintSolver();
+		PBDConstraintSolver();
+		~PBDConstraintSolver();
 
 		void constrain() override;
 
 	public:
-		DEF_VAR(bool, FrictionEnabled, true, "");
+		DEF_VAR(bool, DynamicFrictionEnabled, true, "");
+
+		DEF_VAR(bool, StaticFrictionEnabled, false, "");
+
+		DEF_VAR(Real, RestituteCoef, 0.5f, "");
 
 		DEF_VAR(uint, IterationNumber, 1, "");
 
@@ -72,19 +59,17 @@ namespace dyno
 
 		DEF_ARRAY_IN(ContactPair, Contacts, DeviceType::GPU, "");
 
+		DEF_ARRAY_IN(Joint, Joint, DeviceType::GPU, "");
+
 	private:
 		void initializeJacobian(Real dt);
 
 		void initialize();
 
 	private:
-		DArray<Coord> mJ;		//Jacobian
-		DArray<Coord> mB;		//B = M^{-1}J^T
-
-		DArray<Real> mEta;		//eta
-		DArray<Real> mD;		//diagonal elements of JB
 		DArray<Real> mLambdaN;	//contact impulse
 		DArray<Real> mLambdaT;
+		DArray<Real> mLambdaJ;
 
 		DArray<Real> mContactNumber;
 

@@ -15,17 +15,21 @@ namespace dyno
 			int a,
 			int b,
 			Real angle,
+			Vector<Real, 3> ax = Vector<Real, 3>(1.0f, 0.0f, 0.0f),
 			Vector<Real, 3> off1 = Vector<Real, 3>(0.0f),
 			Vector<Real, 3> off2 = Vector<Real, 3>(0.0f),
-			Real minA = 0,
-			Real maxA = 0)
+			Real minA = 0.0f,
+			Real maxA = 0.0f,
+			Real alpha = 0.0f)
 		{
-			bodyId1 = a;
-			bodyId2 = b;
-			offset1 = off1;
-			offset2 = off2;
-			minAngle = minA;
-			maxAngle = maxA;
+			this->bodyId1 = a;
+			this->bodyId2 = b;
+			this->axis = ax;
+			this->offset1 = off1;
+			this->offset2 = off2;
+			this->minAngle = minA;
+			this->maxAngle = maxA;
+			this->alpha = alpha;
 		}
 
 		int bodyId1;
@@ -33,6 +37,7 @@ namespace dyno
 
 		Vector<Real, 3> offset1;
 		Vector<Real, 3> offset2;
+		Vector<Real, 3> axis;
 
 		Vector<Real, 3> a1;
 		Vector<Real, 3> b1;
@@ -41,5 +46,6 @@ namespace dyno
 		Real angle;
 		Real minAngle;
 		Real maxAngle;
+		Real alpha;
 	};
 }
