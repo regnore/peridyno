@@ -517,12 +517,12 @@ namespace dyno
 
 		cnt++;
 		//if(cnt % 5 != 1)
-		if (cnt % 1 != 0)
+		/*if (cnt % 1 != 0)
 		{
 			printf("not nbq\n");
 			return;
 		}
-		printf("nbq\n");
+		printf("nbq\n");*/
 
 		if (t_num == 0)
 		{

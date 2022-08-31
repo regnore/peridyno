@@ -22,7 +22,7 @@ namespace dyno
 		{
 			center = Vector<Real, 3>(0.0f, 0.0f, 0.0f);
 			halfLength = Vector<Real, 3>(1.0f, 1.0f, 1.0f);
-			rot = Quat<Real>(1.0f, 0.0f, 0.0f, 0.0f);
+			rot = Quat<Real>(0.0f, 0.0f, 0.0f, 1.0f);
 		}
 
 		Vector<Real, 3> center;
@@ -87,6 +87,9 @@ namespace dyno
 			collisionMask = CT_AllObjects;
 			shapeType = ET_Other;
 			angle = Quat1f(0.0f, 0.0f, 0.0f, 1.0f);
+			a0 = Vec3f(0.0f, 0.0f, 1.0f);
+			b0 = Vec3f(1.0f, 0.0f, 0.0f);
+			c0 = Vec3f(0.0f, 1.0f, 0.0f);
 		}
 
 		Quat<Real> angle;
@@ -114,5 +117,9 @@ namespace dyno
 		ElementType shapeType;
 
 		CollisionMask collisionMask;
+
+		Vector<Real, 3> a0;
+		Vector<Real, 3> b0;
+		Vector<Real, 3> c0;
 	};
 }

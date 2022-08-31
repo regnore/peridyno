@@ -41,7 +41,11 @@ namespace dyno
 
 		Vector<Real, 3> a1;
 		Vector<Real, 3> b1;
+		Vector<Real, 3> c1;
+
+		Vector<Real, 3> a2;
 		Vector<Real, 3> b2;
+		Vector<Real, 3> c2;
 
 		Real angle;
 		Real minAngle;

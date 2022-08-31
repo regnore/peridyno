@@ -108,6 +108,8 @@ namespace dyno
 
 		DEF_ARRAY_STATE(Joint, Joint, DeviceType::GPU, "Joints");
 
+		DEF_ARRAY_STATE(Coord, A, DeviceType::GPU, "a");
+
 	private:
 		std::vector<RigidBodyInfo> mHostRigidBodyStates;
 
@@ -138,6 +140,7 @@ namespace dyno
 
 		void updateVelocityAngule(Vec3f force, Vec3f torque, float dt);
 		void advect(float dt);
+		void limitAngle(Coord n, Coord n1, Coord n2, Real min, Real max);
 		//float m_damping = 0.9f;
 
 		float m_yaw;

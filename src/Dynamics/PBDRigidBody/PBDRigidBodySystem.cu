@@ -52,6 +52,7 @@ namespace dyno
 		this->stateDynamicFriction()->connect(iterSolver->inDynamicFriction());
 		this->stateStaticFriction()->connect(iterSolver->inStaticFriction());
 		this->stateJoint()->connect(iterSolver->inJoint());
+		this->stateA()->connect(iterSolver->inA());
 
 		merge->outContacts()->connect(iterSolver->inContacts());
 
@@ -150,10 +151,36 @@ namespace dyno
 	void PBDRigidBodySystem<TDataType>::addJoint(
 		const Joint& j)
 	{
-		mHostBoxes[j.bodyId2].center += (mHostBoxes[j.bodyId1].center+ mHostBoxes[j.bodyId1].rot.rotate(j.offset1))- (mHostBoxes[j.bodyId2].center + mHostBoxes[j.bodyId2].rot.rotate(j.offset2));
+		Coord n = mHostRigidBodyStates[j.bodyId1].angle.normalize().rotate(mHostRigidBodyStates[j.bodyId1].a0).cross(mHostRigidBodyStates[j.bodyId2].angle.normalize().rotate(mHostRigidBodyStates[j.bodyId2].a0));
+		Real phi = n.norm();
+		if (phi > 0) 
+		{
+			n /= n.norm();
+			mHostBoxes[j.bodyId2].rot = mHostBoxes[j.bodyId2].rot * TQuat(-asinf(phi), mHostBoxes[j.bodyId2].rot.inverse().rotate(n));
+			mHostRigidBodyStates[j.bodyId2].angle = mHostBoxes[j.bodyId2].rot;
+		}
+		mHostBoxes[j.bodyId2].center += (mHostBoxes[j.bodyId1].center+ mHostBoxes[j.bodyId1].rot.normalize().rotate(j.offset1))- (mHostBoxes[j.bodyId2].center + mHostBoxes[j.bodyId2].rot.normalize().rotate(j.offset2));
 		mHostRigidBodyStates[j.bodyId1].position = mHostBoxes[j.bodyId1].center;
 		mHostRigidBodyStates[j.bodyId2].position = mHostBoxes[j.bodyId2].center;
 		mHostJoints.push_back(j);
+	}
+
+	template<typename TDataType>
+	void PBDRigidBodySystem<TDataType>::limitAngle(Coord n, Coord n1, Coord n2, Real min, Real max)
+	{
+		Real phi = asinf(n1.cross(n2).dot(n));
+		if (n1.dot(n2) < 0)
+			phi = 2 * M_PI - phi;
+		if(phi > M_PI)
+			phi = phi - 2 * M_PI;
+		if (phi < -M_PI)
+			phi = phi + 2 * M_PI;
+		if (phi < min || phi > max)
+		{
+			phi = clamp(phi, min, max);
+			n1 = TQuat(n[0], n[1], n[2], phi).rotate(n1);
+			Coord dq_limit = n1.cross(n2);
+		}
 	}
 
 	template <typename Real, typename Coord, typename Matrix, typename Quat>
@@ -168,6 +195,7 @@ namespace dyno
 		DArray<CollisionMask> mask,
 		DArray<Real> miuS,
 		DArray<Real> miuD,
+		DArray<Coord> a0,
 		DArray<RigidBodyInfo> states,
 		ElementOffset offset)
 	{
@@ -183,6 +211,7 @@ namespace dyno
 		pos[tId] = states[tId].position;
 		inertia[tId] = states[tId].inertia;
 		mask[tId] = states[tId].collisionMask;
+		a0[tId] = states[tId].a0;
 		miuS[tId] = 0.42f;
 		miuD[tId] = 0.4f;
 	}
@@ -279,6 +308,7 @@ namespace dyno
 		this->stateCollisionMask()->resize(sizeOfRigids);
 		this->stateDynamicFriction()->resize(sizeOfRigids);
 		this->stateStaticFriction()->resize(sizeOfRigids);
+		this->stateA()->resize(sizeOfRigids);
 
 		cuExecute(sizeOfRigids,
 			PBDRB_SetupInitialStates,
@@ -292,6 +322,7 @@ namespace dyno
 			this->stateCollisionMask()->getData(),
 			this->stateStaticFriction()->getData(),
 			this->stateDynamicFriction()->getData(),
+			this->stateA()->getData(),
 			mDeviceRigidBodyStates,
 			eleOffset);
 

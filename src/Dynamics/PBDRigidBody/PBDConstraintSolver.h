@@ -26,7 +26,7 @@ namespace dyno
 	public:
 		DEF_VAR(bool, DynamicFrictionEnabled, true, "");
 
-		DEF_VAR(bool, StaticFrictionEnabled, false, "");
+		DEF_VAR(bool, StaticFrictionEnabled, false , "");
 
 		DEF_VAR(Real, RestituteCoef, 0.5f, "");
 
@@ -61,6 +61,8 @@ namespace dyno
 
 		DEF_ARRAY_IN(Joint, Joint, DeviceType::GPU, "");
 
+		DEF_ARRAY_IN(Coord, A, DeviceType::GPU, "");
+
 	private:
 		void initializeJacobian(Real dt);
 
@@ -70,8 +72,10 @@ namespace dyno
 		DArray<Real> mLambdaN;	//contact impulse
 		DArray<Real> mLambdaT;
 		DArray<Real> mLambdaJ;
+		DArray<Real> mLambdaJA;
 
 		DArray<Real> mContactNumber;
+		DArray<Real> mJointNumber;
 
 		DArray<Matrix> mInitialInertia;
 
