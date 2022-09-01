@@ -34,7 +34,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 	//box.rot= Quat<Real>(M_PI /4.0f, Vec3f(1.0f, 0.0f, 0.0f));
 	//rigidBody.angularVelocity = Vec3f(0.0f, 50.0f, 50.0f);
 	box.rot = Quat<Real>(M_PI * 1.0f / 3.0f, Vec3f(0.0f, 0.0f, 1.0f).normalize());
-	rigidBody.angularVelocity = Vec3f(0.0f, 100.0f,0.0f);
+	rigidBody.angularVelocity = Vec3f(0.0f, 300.0f,0.0f);
 	rigid->addBox(box, rigidBody);
 
 	box.rot = Quat<Real>(M_PI * 5.0f / 6.0f, Vec3f(0.0f,0.0f,1.0f).normalize());

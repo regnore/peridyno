@@ -34,17 +34,17 @@ namespace dyno
 		void addBox(
 			const BoxInfo& box, 
 			const RigidBodyInfo& bodyDef,
-			const Real density = Real(1));
+			const Real density = Real(1000));
 
 		void addSphere(
 			const SphereInfo& sphere,
 			const RigidBodyInfo& bodyDef, 
-			const Real density = Real(1));
+			const Real density = Real(1000));
 
 		void addTet(
 			const TetInfo& tet,
 			const RigidBodyInfo& bodyDef,
-			const Real density = Real(1));
+			const Real density = Real(1000));
 
 		void addJoint(
 			const Joint& j
@@ -57,7 +57,7 @@ namespace dyno
 
 	public:
 		DEF_VAR(bool, DynamicFrictionEnabled, true, "A toggle to control the dynamic friction");
-		DEF_VAR(bool, StaticFrictionEnabled, false, "A toggle to control the static friction");
+		DEF_VAR(bool, StaticFrictionEnabled, true, "A toggle to control the static friction");
 
 		DEF_INSTANCE_STATE(TopologyModule, Topology, "Topology");
 

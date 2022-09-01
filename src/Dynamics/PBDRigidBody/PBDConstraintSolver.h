@@ -26,7 +26,7 @@ namespace dyno
 	public:
 		DEF_VAR(bool, DynamicFrictionEnabled, true, "");
 
-		DEF_VAR(bool, StaticFrictionEnabled, false , "");
+		DEF_VAR(bool, StaticFrictionEnabled, true , "");
 
 		DEF_VAR(Real, RestituteCoef, 0.5f, "");
 

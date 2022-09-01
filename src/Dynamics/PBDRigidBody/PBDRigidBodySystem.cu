@@ -212,8 +212,8 @@ namespace dyno
 		inertia[tId] = states[tId].inertia;
 		mask[tId] = states[tId].collisionMask;
 		a0[tId] = states[tId].a0;
-		miuS[tId] = 0.42f;
-		miuD[tId] = 0.4f;
+		miuS[tId] = 0.8f;
+		miuD[tId] = 0.7f;
 	}
 
 	__global__ void SetupBoxes(
