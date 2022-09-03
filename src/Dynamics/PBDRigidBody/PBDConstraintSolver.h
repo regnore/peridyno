@@ -63,6 +63,8 @@ namespace dyno
 
 		DEF_ARRAY_IN(Coord, A, DeviceType::GPU, "");
 
+		DEF_ARRAY_IN(Coord, B, DeviceType::GPU, "");
+
 	private:
 		void initializeJacobian(Real dt);
 

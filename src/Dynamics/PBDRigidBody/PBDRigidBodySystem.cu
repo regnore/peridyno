@@ -53,6 +53,7 @@ namespace dyno
 		this->stateStaticFriction()->connect(iterSolver->inStaticFriction());
 		this->stateJoint()->connect(iterSolver->inJoint());
 		this->stateA()->connect(iterSolver->inA());
+		this->stateB()->connect(iterSolver->inB());
 
 		merge->outContacts()->connect(iterSolver->inContacts());
 
@@ -196,6 +197,7 @@ namespace dyno
 		DArray<Real> miuS,
 		DArray<Real> miuD,
 		DArray<Coord> a0,
+		DArray<Coord> b0,
 		DArray<RigidBodyInfo> states,
 		ElementOffset offset)
 	{
@@ -212,6 +214,7 @@ namespace dyno
 		inertia[tId] = states[tId].inertia;
 		mask[tId] = states[tId].collisionMask;
 		a0[tId] = states[tId].a0;
+		b0[tId] = states[tId].b0;
 		miuS[tId] = 0.8f;
 		miuD[tId] = 0.7f;
 	}
@@ -309,6 +312,7 @@ namespace dyno
 		this->stateDynamicFriction()->resize(sizeOfRigids);
 		this->stateStaticFriction()->resize(sizeOfRigids);
 		this->stateA()->resize(sizeOfRigids);
+		this->stateB()->resize(sizeOfRigids);
 
 		cuExecute(sizeOfRigids,
 			PBDRB_SetupInitialStates,
@@ -323,6 +327,7 @@ namespace dyno
 			this->stateStaticFriction()->getData(),
 			this->stateDynamicFriction()->getData(),
 			this->stateA()->getData(),
+			this->stateB()->getData(),
 			mDeviceRigidBodyStates,
 			eleOffset);
 

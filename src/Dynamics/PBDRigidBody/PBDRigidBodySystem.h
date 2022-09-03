@@ -110,6 +110,8 @@ namespace dyno
 
 		DEF_ARRAY_STATE(Coord, A, DeviceType::GPU, "a");
 
+		DEF_ARRAY_STATE(Coord, B, DeviceType::GPU, "b");
+
 	private:
 		std::vector<RigidBodyInfo> mHostRigidBodyStates;
 
