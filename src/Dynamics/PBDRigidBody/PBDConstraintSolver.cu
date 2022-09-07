@@ -131,6 +131,10 @@ namespace dyno
 
 				Real dLambdaN = ((-c - tildeAlpha * lambdaN[pId]) / (w1 + w2 + tildeAlpha));
 				dLambdaN/= (stepInv[idx1] + stepInv[idx2]);
+				if (isnan(dLambdaN)|| abs(dLambdaN) > 1.0f)
+				{
+					dLambdaN = -EPSILON;
+				}
 				lambdaN[pId] += dLambdaN;
 
 				Coord p = dLambdaN * n;
@@ -157,6 +161,8 @@ namespace dyno
 				atomicAdd(&q[idx2].y, -temp6.y);
 				atomicAdd(&q[idx2].z, -temp6.z);
 				atomicAdd(&q[idx2].w, -temp6.w);
+				q[idx1] = q[idx1].normalize();
+				q[idx2] = q[idx2].normalize();
 			}
 			else
 			{
@@ -169,6 +175,10 @@ namespace dyno
 				//printf("%.10f\t%.10f\n",1/w1,m[idx1]);
 				Real dLambdaN = ((-c - tildeAlpha * lambdaN[pId]) / (w1 + w2 + tildeAlpha));
 				dLambdaN /= stepInv[idx1];
+				if (isnan(dLambdaN) || abs(dLambdaN) > 1.0f)
+				{
+					dLambdaN = -EPSILON;
+				}
 				lambdaN[pId] += dLambdaN;
 				Coord p = dLambdaN * n;
 				Coord temp1 = I[idx1].inverse() * (r1.cross(p));
@@ -181,6 +191,7 @@ namespace dyno
 				atomicAdd(&q[idx1].y, temp2.y);
 				atomicAdd(&q[idx1].z, temp2.z);
 				atomicAdd(&q[idx1].w, temp2.w);
+				q[idx1] = q[idx1].normalize();
 			}
 		}
 	}
@@ -232,6 +243,10 @@ namespace dyno
 
 			Real dLambdaT = ((-dP_t.norm() - tildeAlpha * lambdaT[pId]) / (w1 + w2 + tildeAlpha));
 			dLambdaT /= stepInv[idx1] + stepInv[idx2];
+			if (isnan(dLambdaT) || abs(dLambdaT) > 1.0f)
+			{
+				dLambdaT = -EPSILON;
+			}
 			lambdaT[pId] += dLambdaT;
 
 			if (dP_t.norm()> EPSILON && lambdaT[pId] > (miuS[idx1] + miuS[idx2]) * lambdaN[pId])
@@ -259,6 +274,8 @@ namespace dyno
 				atomicAdd(&q[idx2].y, -temp10.y);
 				atomicAdd(&q[idx2].z, -temp10.z);
 				atomicAdd(&q[idx2].w, -temp10.w);
+				q[idx1] = q[idx1].normalize();
+				q[idx2] = q[idx2].normalize();
 			}
 		}
 			else
@@ -276,6 +293,10 @@ namespace dyno
 				Coord dP_t = dP - (dP.dot(n)) * n;
 				Real dLambdaT = ((-dP_t.norm() - tildeAlpha * lambdaT[pId]) / (w1 + w2 + tildeAlpha));
 				dLambdaT /= stepInv[idx1];
+				if (isnan(dLambdaT) || abs(dLambdaT) > 1.0f)
+				{
+					dLambdaT = -EPSILON;
+				}
 				//printf("%.10f\t%.10f\t%.10f\t%.10f\t%.10f\n",dP.norm(),dP_t.norm(),dLambdaT,dP_t.dot(n),lambdaN[pId]);
 				lambdaT[pId] += dLambdaT;
 
@@ -295,6 +316,7 @@ namespace dyno
 					atomicAdd(&q[idx1].y, temp9.y);
 					atomicAdd(&q[idx1].z, temp9.z);
 					atomicAdd(&q[idx1].w, temp9.w);
+					q[idx1] = q[idx1].normalize();
 				}
 			}
 		}
@@ -334,6 +356,10 @@ namespace dyno
 				Real w1 = 1.0f / m[idx1] + (Real)(temp1.dot(I[idx1].inverse() * temp1));
 				Real w2 = 1.0f / m[idx2] + (Real)(temp2.dot(I[idx2].inverse() * temp2));
 				Real dLambdaJ = ((-c - tildeAlpha * lambdaJ[pId]) / (w1 + w2 + tildeAlpha));
+				if (isnan(dLambdaJ) || abs(dLambdaJ) > 1.0f)
+				{
+					dLambdaJ = -EPSILON;
+				}
 				lambdaJ[pId] += dLambdaJ;
 
 				Coord p = dLambdaJ * n;
@@ -362,11 +388,13 @@ namespace dyno
 				atomicAdd(&q[idx2].y, -temp6.y / jCnt[idx2]);
 				atomicAdd(&q[idx2].z, -temp6.z / jCnt[idx2]);
 				atomicAdd(&q[idx2].w, -temp6.w / jCnt[idx2]);
+				q[idx1] = q[idx1].normalize();
+				q[idx2] = q[idx2].normalize();
 			}
 		}
 
 		template <typename Coord, typename Quat, typename Matrix, typename Real, typename Joint>
-		__global__ void PBDRB_SolveJointAngle(
+		__global__ void PBDRB_SolveJointAngleHinge(
 			DArray<Coord> x,
 			DArray<Quat> q,
 			DArray<Real> m,
@@ -395,6 +423,10 @@ namespace dyno
 				Real w1 = n.dot(I[idx1].inverse() * n);
 				Real w2 = n.dot(I[idx2].inverse() * n);
 				Real dLambdaJA = ((- theta - tildeAlpha * lambdaJA[pId]) / (w1 + w2 + tildeAlpha));
+				if (isnan(dLambdaJA))
+				{
+					dLambdaJA = -EPSILON;
+				}
 				lambdaJA[pId] += dLambdaJA;
 				//printf("%.10f\t%.10f\t%.10f\t%.10f\t%.10f\t%.10f\n", dLambdaJA,theta/M_PI*180.0f,dq_h.norm(),a1.norm(),a2.norm(),w1+w2);
 
@@ -414,6 +446,90 @@ namespace dyno
 				atomicAdd(&q[idx2].y, -temp4.y / jCnt[idx2]);
 				atomicAdd(&q[idx2].z, -temp4.z / jCnt[idx2]);
 				atomicAdd(&q[idx2].w, -temp4.w / jCnt[idx2]);
+				q[idx1] = q[idx1].normalize();
+				q[idx2] = q[idx2].normalize();
+			}
+		}
+
+		template <typename Coord, typename Quat, typename Matrix, typename Real, typename Joint>
+		__global__ void PBDRB_SolveJointAngleLimit(
+			DArray<Coord> x,
+			DArray<Quat> q,
+			DArray<Real> m,
+			DArray<Coord> a0,
+			DArray<Coord> b0,
+			DArray<Matrix> I,
+			DArray<Joint> joint,
+			DArray<Real> lambdaJAL,
+			DArray<Real> jCnt,
+			Real h)
+		{
+			int pId = threadIdx.x + (blockIdx.x * blockDim.x);
+			if (pId >= joint.size()) return;
+
+			if (joint[pId].maxAngle - joint[pId].minAngle < M_PI)
+			{
+				int idx1 = joint[pId].bodyId1;
+				int idx2 = joint[pId].bodyId2;
+				Coord a1 = q[idx1].normalize().rotate(a0[idx1]);
+				Coord a2 = q[idx2].normalize().rotate(a0[idx2]);
+				Coord b1 = q[idx1].normalize().rotate(b0[idx1]);
+				Coord b2 = q[idx2].normalize().rotate(b0[idx2]);
+				Coord a = (a1 + a2) / 2;
+
+				Real phi = asinf(b1.cross(b2).dot(a));
+				//printf("%f\t%f\n",phi/M_PI*180,b1.dot(b2));
+				if (phi < 0)
+				{
+					phi = -phi;
+					a = -a;
+				}
+				if (b1.dot(b2) < 0)
+					phi = M_PI - phi;
+				if (phi < joint[pId].minAngle || phi > joint[pId].maxAngle)
+				{
+					//printf("%f\n", phi / M_PI * 180);
+					phi = clamp(phi, joint[pId].minAngle, joint[pId].maxAngle);
+					Coord bT = b1;
+					b1 = Quat(phi,a).rotate(b1);
+					//printf("%f\t%f\t%f\n%f\t%f\t%f\n",bT[0], bT[1], bT[2],b1[0],b1[1],b1[2]);
+					Coord dq_limit = b1.cross(b2);
+					Real theta = asinf(dq_limit.norm());
+					//printf("%f\t%f\t%f\t%f\n",asinf(b1.cross(bT).dot(a)) / M_PI * 180, theta / M_PI * 180, dq_limit.norm(),b1.norm());
+					if (theta != 0.0f)
+					{
+						Coord n = dq_limit / dq_limit.norm();
+
+						Real tildeAlpha = joint[pId].alpha / h / h;
+
+						Real w1 = n.dot(I[idx1].inverse() * n);
+						Real w2 = n.dot(I[idx2].inverse() * n);
+						Real dLambdaJA = ((-theta - tildeAlpha * lambdaJAL[pId]) / (w1 + w2 + tildeAlpha));
+						if (isnan(dLambdaJA))
+						{
+							dLambdaJA = -EPSILON;
+						}
+						lambdaJAL[pId] += dLambdaJA;
+						//printf("%.10f\t%.10f\t%.10f\t%.10f\t%.10f\t%.10f\n", dLambdaJA,theta/M_PI*180.0f,dq_h.norm(),a1.norm(),a2.norm(),w1+w2);
+
+						Coord p = -dLambdaJA * n;
+
+						Coord temp1 = I[idx1].inverse() * p;
+						Coord temp2 = I[idx2].inverse() * p;
+						Quat temp3 = Quat(temp1[0], temp1[1], temp1[2], 0) * q[idx1] * 0.5f;
+						Quat temp4 = Quat(temp2[0], temp2[1], temp2[2], 0) * q[idx2] * 0.5f;
+
+						atomicAdd(&q[idx1].x, temp3.x / jCnt[idx1]);
+						atomicAdd(&q[idx1].y, temp3.y / jCnt[idx1]);
+						atomicAdd(&q[idx1].z, temp3.z / jCnt[idx1]);
+						atomicAdd(&q[idx1].w, temp3.w / jCnt[idx1]);
+
+						atomicAdd(&q[idx2].x, -temp4.x / jCnt[idx2]);
+						atomicAdd(&q[idx2].y, -temp4.y / jCnt[idx2]);
+						atomicAdd(&q[idx2].z, -temp4.z / jCnt[idx2]);
+						atomicAdd(&q[idx2].w, -temp4.w / jCnt[idx2]);
+					}
+				}
 			}
 		}
 
@@ -626,11 +742,32 @@ namespace dyno
 					this->inRotationMatrix()->getData());
 
 				cuExecute(numJ,
-					PBDRB_SolveJointAngle,
+					PBDRB_SolveJointAngleHinge,
 					this->inCenter()->getData(),
 					this->inQuaternion()->getData(),
 					this->inMass()->getData(), 
 					this->inA()->getData(),
+					this->inInertia()->getData(),
+					this->inJoint()->getData(),
+					this->mLambdaJ,
+					this->mJointNumber,
+					h);
+
+				cuExecute(
+					num,
+					PBDRB_UpdateRI,
+					this->inQuaternion()->getData(),
+					this->inInitialInertia()->getData(),
+					this->inInertia()->getData(),
+					this->inRotationMatrix()->getData());
+
+				cuExecute(numJ,
+					PBDRB_SolveJointAngleLimit,
+					this->inCenter()->getData(),
+					this->inQuaternion()->getData(),
+					this->inMass()->getData(),
+					this->inA()->getData(),
+					this->inB()->getData(),
 					this->inInertia()->getData(),
 					this->inJoint()->getData(),
 					this->mLambdaJ,

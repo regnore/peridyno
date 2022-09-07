@@ -58,6 +58,8 @@ namespace dyno
 		merge->outContacts()->connect(iterSolver->inContacts());
 
 		this->animationPipeline()->pushModule(iterSolver);
+
+		this->setDt(this->getDt()/3.0f);
 	}
 
 	template<typename TDataType>
@@ -152,14 +154,17 @@ namespace dyno
 	void PBDRigidBodySystem<TDataType>::addJoint(
 		const Joint& j)
 	{
-		Coord n = mHostRigidBodyStates[j.bodyId1].angle.normalize().rotate(mHostRigidBodyStates[j.bodyId1].a0).cross(mHostRigidBodyStates[j.bodyId2].angle.normalize().rotate(mHostRigidBodyStates[j.bodyId2].a0));
+		/*Coord n = mHostRigidBodyStates[j.bodyId1].angle.normalize().rotate(mHostRigidBodyStates[j.bodyId1].a0).cross(mHostRigidBodyStates[j.bodyId2].angle.normalize().rotate(mHostRigidBodyStates[j.bodyId2].a0));
 		Real phi = n.norm();
 		if (phi > 0) 
 		{
 			n /= n.norm();
 			mHostBoxes[j.bodyId2].rot = mHostBoxes[j.bodyId2].rot * TQuat(-asinf(phi), mHostBoxes[j.bodyId2].rot.inverse().rotate(n));
 			mHostRigidBodyStates[j.bodyId2].angle = mHostBoxes[j.bodyId2].rot;
-		}
+		}*/
+		TQuat q = TQuat(j.angle, mHostRigidBodyStates[j.bodyId1].a0);
+		mHostBoxes[j.bodyId2].rot = mHostBoxes[j.bodyId1].rot * q;
+		mHostRigidBodyStates[j.bodyId2].angle = mHostBoxes[j.bodyId2].rot;
 		mHostBoxes[j.bodyId2].center += (mHostBoxes[j.bodyId1].center+ mHostBoxes[j.bodyId1].rot.normalize().rotate(j.offset1))- (mHostBoxes[j.bodyId2].center + mHostBoxes[j.bodyId2].rot.normalize().rotate(j.offset2));
 		mHostRigidBodyStates[j.bodyId1].position = mHostBoxes[j.bodyId1].center;
 		mHostRigidBodyStates[j.bodyId2].position = mHostBoxes[j.bodyId2].center;

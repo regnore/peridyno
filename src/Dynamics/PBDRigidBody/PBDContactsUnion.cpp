@@ -9,6 +9,7 @@ namespace dyno
 	{
 		this->inContactsA()->tagOptional(true); 
 		this->inContactsB()->tagOptional(true);
+		//this->outContacts()->tagOptional(true);
 	}
 
 	template<typename TDataType>

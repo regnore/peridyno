@@ -198,7 +198,8 @@ namespace dyno
 
 		if (mAdvativeInterval)
 		{
-			this->advance(dt);
+			for(int i=0;i<3;i++)
+				this->advance(dt);
 		}
 		else
 		{

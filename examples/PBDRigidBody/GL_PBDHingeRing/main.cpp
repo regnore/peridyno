@@ -29,27 +29,61 @@ std::shared_ptr<SceneGraph> creatBricks()
 	RigidBodyInfo rigidBody;
 	BoxInfo box;
 
-	box.center = Vec3f(0.5f,0.05f,0.5f);
+	box.center = Vec3f(0.5f,3.0f,0.5f);
 	box.halfLength = Vec3f(0.4f, 0.04f, 0.04f);
 	//box.rot= Quat<Real>(M_PI /4.0f, Vec3f(1.0f, 0.0f, 0.0f));
 	//rigidBody.angularVelocity = Vec3f(0.0f, 50.0f, 50.0f);
-	box.rot = Quat<Real>(0.0f, Vec3f(0.0f, 0.0f, 1.0f).normalize());
-	//rigidBody.angularVelocity = Vec3f(0.0f, 100.0f,0.0f);
+	box.rot = Quat<Real>(M_PI * 1.0f / 3.0f, Vec3f(0.0f, 0.0f, 1.0f).normalize());
+	rigidBody.angularVelocity = Vec3f(10.0f, 500.0f,10.0f);
 	rigid->addBox(box, rigidBody);
 
-	//box.rot = Quat<Real>(M_PI * 1.0f / 2.0f, Vec3f(0.0f,0.0f,1.0f).normalize());
+	rigid->addBox(box, rigidBody);
 
 	rigid->addBox(box, rigidBody);
+
+	rigid->addBox(box, rigidBody);
+	 
+	
 	
 	Joint<Real> j1 = Joint<Real>(0,1);
 	j1.setHinge(
 		Vec3f(-0.40f, 0.041f, 0.0f),
 		Vec3f(-0.40f, -0.041f, 0.0f),
-		M_PI / 4.0f,
-		M_PI / 3.0f * 2.0f,
-		M_PI / 100.0f * 45.0f);
-	
+		M_PI / 6.0f,
+		M_PI / 6.0f * 5,
+		M_PI / 2.0f
+		);
 	rigid->addJoint(j1);
+
+	Joint<Real> j2 = Joint<Real>(1, 2);
+	j2.setHinge(
+		Vec3f(0.40f, -0.041f, 0.0f),
+		Vec3f(0.40f, 0.041f, 0.0f),
+		M_PI / 6.0f,
+		M_PI / 6.0f * 5,
+		M_PI / 2.0f
+		);
+	rigid->addJoint(j2);
+
+	Joint<Real> j3 = Joint<Real>(2, 3);
+	j3.setHinge(
+		Vec3f(-0.40f, 0.041f, 0.0f),
+		Vec3f(-0.40f, -0.041f, 0.0f),
+		M_PI / 6.0f,
+		M_PI / 6.0f * 5,
+		M_PI / 2.0f
+	);
+	rigid->addJoint(j3);
+
+	Joint<Real> j4 = Joint<Real>(3, 0);
+	j4.setHinge(
+		Vec3f(0.40f, -0.041f, 0.0f),
+		Vec3f(0.40f, 0.041f, 0.0f),
+		M_PI / 6.0f,
+		M_PI / 6.0f * 5,
+		M_PI / 2.0f
+	);
+	rigid->addJoint(j4);
 
 	auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();
 	rigid->stateTopology()->connect(mapper->inDiscreteElements());

@@ -25,31 +25,54 @@ std::shared_ptr<SceneGraph> creatBricks()
 	std::shared_ptr<SceneGraph> scn = std::make_shared<SceneGraph>();
 
 	auto rigid = scn->addNode(std::make_shared<PBDRigidBodySystem<DataType3f>>());
-
+	//rigid->varDynamicFrictionEnabled()->setValue(false);
+	//rigid->varStaticFrictionEnabled()->setValue(false);
 	RigidBodyInfo rigidBody;
 	BoxInfo box;
 
-	box.center = Vec3f(0.5f,0.05f,0.5f);
-	box.halfLength = Vec3f(0.4f, 0.04f, 0.04f);
-	//box.rot= Quat<Real>(M_PI /4.0f, Vec3f(1.0f, 0.0f, 0.0f));
-	//rigidBody.angularVelocity = Vec3f(0.0f, 50.0f, 50.0f);
-	box.rot = Quat<Real>(0.0f, Vec3f(0.0f, 0.0f, 1.0f).normalize());
-	//rigidBody.angularVelocity = Vec3f(0.0f, 100.0f,0.0f);
+	int n = 1000;
+	box.halfLength = Vec3f(0.4f, 0.05f, 0.05f)/100.0f;
+	box.center = Vec3f(0.5f, 0.4f, 0.5f) / 100.0f;
+	//rigidBody.angularVelocity = Vec3f(0.0f, 500.0f, 0.0f);
+	box.rot = Quat<Real>(M_PI * 1.0f / 2.0f, Vec3f(0.0f, 0.0f, 1.0f).normalize());
 	rigid->addBox(box, rigidBody);
-
-	//box.rot = Quat<Real>(M_PI * 1.0f / 2.0f, Vec3f(0.0f,0.0f,1.0f).normalize());
-
-	rigid->addBox(box, rigidBody);
-	
-	Joint<Real> j1 = Joint<Real>(0,1);
-	j1.setHinge(
-		Vec3f(-0.40f, 0.041f, 0.0f),
-		Vec3f(-0.40f, -0.041f, 0.0f),
-		M_PI / 4.0f,
-		M_PI / 3.0f * 2.0f,
-		M_PI / 100.0f * 45.0f);
-	
-	rigid->addJoint(j1);
+	for (int i = 0; i < n; i++)
+	{
+		int r = i % 4;
+		rigid->addBox(box, rigidBody);
+		Joint<Real> j = Joint<Real>(i, i + 1);
+		switch (r) 
+		{
+			case 0:
+				j.setHinge(
+					Vec3f(0.40f, -0.051f, 0.0f) / 100.0f,
+					Vec3f(0.40f, 0.051f, 0.0f) / 100.0f,
+					M_PI);
+				rigid->addJoint(j);
+				break;
+			case 1:
+				j.setHinge(
+					Vec3f(-0.40f, -0.051f, 0.0f) / 100.0f,
+					Vec3f(0.40f, -0.051f, 0.0f) / 100.0f,
+					0.0f);
+				rigid->addJoint(j);
+				break;
+			case 2:
+				j.setHinge(
+					Vec3f(-0.40f, 0.051f, 0.0f) / 100.0f,
+					Vec3f(-0.40f, -0.051f, 0.0f) / 100.0f,
+					M_PI);
+				rigid->addJoint(j);
+				break;
+			case 3:
+				j.setHinge(
+					Vec3f(0.40f, 0.051f, 0.0f) / 100.0f,
+					Vec3f(-0.40f, 0.051f, 0.0f) / 100.0f,
+					0.0f);
+				rigid->addJoint(j);
+				break;
+		}
+	}
 
 	auto mapper = std::make_shared<DiscreteElementsToTriangleSet<DataType3f>>();
 	rigid->stateTopology()->connect(mapper->inDiscreteElements());
@@ -67,6 +90,7 @@ std::shared_ptr<SceneGraph> creatBricks()
 
 	auto pRender = std::make_shared<GLPointVisualModule>();
 	pRender->setColor(Vec3f(0, 0, 0));
+	pRender->varPointSize()->setValue(0.0002f);
 	mapper->outTriangleSet()->connect(pRender->inPointSet());
 	rigid->graphicsPipeline()->pushModule(pRender);
 
@@ -82,20 +106,20 @@ std::shared_ptr<SceneGraph> creatBricks()
 	contactMapper->varScale()->setValue(0.02);
 	rigid->graphicsPipeline()->pushModule(contactMapper);
 
-	auto wireRender = std::make_shared<GLWireframeVisualModule>();
+	/*auto wireRender = std::make_shared<GLWireframeVisualModule>();
 	wireRender->setColor(Vec3f(0, 1, 0));
 	contactMapper->outEdgeSet()->connect(wireRender->inEdgeSet());
-	rigid->graphicsPipeline()->pushModule(wireRender);
+	rigid->graphicsPipeline()->pushModule(wireRender);*/
 
-	//Visualize contact points
-	auto contactPointMapper = std::make_shared<ContactsToPointSet<DataType3f>>();
-	elementQuery->outContacts()->connect(contactPointMapper->inContacts());
-	rigid->graphicsPipeline()->pushModule(contactPointMapper);
+	////Visualize contact points
+	//auto contactPointMapper = std::make_shared<ContactsToPointSet<DataType3f>>();
+	//elementQuery->outContacts()->connect(contactPointMapper->inContacts());
+	//rigid->graphicsPipeline()->pushModule(contactPointMapper);
 
-	auto pointRender = std::make_shared<GLPointVisualModule>();
-	pointRender->setColor(Vec3f(1, 0, 0));
-	contactPointMapper->outPointSet()->connect(pointRender->inPointSet());
-	rigid->graphicsPipeline()->pushModule(pointRender);
+	//auto pointRender = std::make_shared<GLPointVisualModule>();
+	//pointRender->setColor(Vec3f(1, 0, 0));
+	//contactPointMapper->outPointSet()->connect(pointRender->inPointSet());
+	//rigid->graphicsPipeline()->pushModule(pointRender);
 
 	return scn;
 }
